@@ -35,10 +35,62 @@ This is the kind of intelligence Bloomberg Terminal and Morningstar Direct charg
 ## 🛠️ Prerequisites
 
 - n8n account (cloud or local)
-- API key: `YOUR_API_KEY_HERE`
+- MfAPIs key (get yours at [mfapis.in](https://mfapis.in) or contact@mfapis.in)
+- OpenAI API key (required only for the AI Agent extension in Step 10+)
 - A browser
 
 No coding experience needed. All logic is pre-written — you just connect the nodes.
+
+---
+
+## 🔐 Setting Up Credentials
+
+> Do this **before** building the workflow. Credentials are stored once in n8n and reused across all nodes.
+
+---
+
+### Credential 1 — MfAPIs Key (required)
+
+This key authenticates every HTTP Request node that calls `app2.mfapis.club`.
+
+1. In n8n, click your **profile icon** (bottom-left) → **Settings**
+2. Go to **Credentials** → click **+ Add credential**
+3. Search for **"Header Auth"** → select it
+4. Fill in:
+   - **Credential name**: `MfAPIs Key`
+   - **Name**: `x-api-key`
+   - **Value**: *(paste your MfAPIs key here)*
+5. Click **Save**
+
+**How to use it in an HTTP Request node:**
+- Open any HTTP Request node
+- Scroll to **Authentication** → set to **"Predefined Credential Type"** or **"Generic Credential Type"**
+- Select **Header Auth** → choose `MfAPIs Key`
+
+> Alternatively: in each HTTP Request node → **Headers** tab → add manually:
+> - Header name: `x-api-key`
+> - Header value: *(paste your key directly)*
+
+---
+
+### Credential 2 — OpenAI API Key (for AI Agent extension)
+
+Required only if you add an **AI Agent node** (e.g., to generate plain-English explanations of signals).
+
+1. In n8n → **Settings** → **Credentials** → **+ Add credential**
+2. Search for **"OpenAI"** → select it
+3. Fill in:
+   - **Credential name**: `OpenAI Key`
+   - **API Key**: *(paste your OpenAI API key)*
+   - Leave **Organization ID** blank unless your account requires it
+4. Click **Save**
+
+**How to get an OpenAI API key:**
+1. Go to [platform.openai.com](https://platform.openai.com)
+2. Sign in → click your profile → **API keys**
+3. Click **+ Create new secret key** → copy it immediately (shown only once)
+
+> **No OpenAI key?** You can substitute any n8n-supported LLM — Anthropic Claude, Google Gemini, or Mistral. Claude is recommended for financial analysis. Setup steps are identical: search for the provider name when adding a credential.
 
 ---
 

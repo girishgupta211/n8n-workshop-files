@@ -187,27 +187,50 @@ Similarly in the analyst subworkflows:
 
 ---
 
-### PHASE 3 — Add Your API Key (3 minutes)
+### PHASE 3 — Add MfAPIs Credential (3 minutes)
 
-> The system uses MfAPIs to get live mutual fund data.
+> The system uses MfAPIs to get live mutual fund data. Set this up once — all HTTP Request nodes will share it.
 
-1. In n8n → **Settings** → **Credentials** → **New Credential** → **HTTP Header Auth**
-2. Name: `MfAPIs Key`
-3. Header name: `x-api-key`
-4. Header value: `YOUR_API_KEY_HERE` *(get your key from contact@mfapis.in)*
-5. Save
+1. In n8n, click your **profile icon** (bottom-left) → **Settings**
+2. Go to **Credentials** → click **+ Add credential**
+3. Search for **"Header Auth"** → select it
+4. Fill in:
+   - **Credential name**: `MfAPIs Key`
+   - **Name**: `x-api-key`
+   - **Value**: *(paste your MfAPIs key — get one at [mfapis.in](https://mfapis.in) or email contact@mfapis.in)*
+5. Click **Save**
 
-Then in **Subworkflow - Data Layer**, update the HTTP Request nodes to use this credential.
+**Wire it up in the Data Layer:**
+1. Open **Subworkflow - Data Layer**
+2. Click each **HTTP Request** node
+3. Under **Authentication** → set to **"Generic Credential Type"** → **Header Auth** → select `MfAPIs Key`
+4. Repeat for every HTTP Request node in the subworkflow
 
 ---
 
-### PHASE 4 — Add OpenAI Key (2 minutes)
+### PHASE 4 — Add OpenAI Credential (2 minutes)
 
-The AI agents (Orchestrator, Midcap Analyst, PSU Analyst) use OpenAI GPT-4.
+The three AI Agent nodes (Main Orchestrator, Midcap Analyst, PSU Analyst) call OpenAI GPT-4.
 
-1. n8n → **Settings** → **Credentials** → **New** → **OpenAI API**
-2. Paste your OpenAI API key
-3. All three AI Agent nodes will automatically use it
+**How to get your OpenAI API key:**
+1. Go to [platform.openai.com](https://platform.openai.com)
+2. Sign in → click your profile → **API keys**
+3. Click **+ Create new secret key** → copy it immediately (shown only once)
+
+**Add it to n8n:**
+1. n8n → **Settings** → **Credentials** → **+ Add credential**
+2. Search for **"OpenAI"** → select it
+3. Fill in:
+   - **Credential name**: `OpenAI Key`
+   - **API Key**: *(paste your key)*
+   - Leave **Organization ID** blank unless required
+4. Click **Save**
+
+**Wire it up:**
+- Open **Main Orchestrator** → click the **AI Agent** node → under **Chat Model** → credential → select `OpenAI Key`
+- Repeat for **Subworkflow - Midcap Analyst** and **Subworkflow - PSU Analyst**
+
+> **No OpenAI key?** Any n8n-supported LLM works — Anthropic Claude, Google Gemini, or Mistral. Credential setup is identical: search for the provider name. Claude (Anthropic) is recommended for financial analysis tasks.
 
 ---
 
