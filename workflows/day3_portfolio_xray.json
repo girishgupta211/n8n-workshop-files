@@ -1,0 +1,377 @@
+{
+  "name": "Day 3 - Portfolio Health Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000001",
+      "name": "Schedule Trigger - Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/portfolio/xray",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000002",
+      "name": "Get Portfolio Xray",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/portfolio/health-score",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000003",
+      "name": "Get Health Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/portfolio/stress-test",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "scenario",
+              "value": "covid_2020"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000004",
+      "name": "Stress Test COVID 2020",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/portfolio/stress-test",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "scenario",
+              "value": "gfc_2008"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000005",
+      "name": "Stress Test GFC 2008",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 380],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000006",
+      "name": "Merge Stress Tests",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const xray = $node['Get Portfolio Xray'].json;\nconst health = $node['Get Health Score'].json;\nconst items = $input.all();\nconst covidStress = items[0]?.json || {};\nconst gfcStress = items[1]?.json || {};\n\nconst record = {\n  recorded_at: new Date().toISOString(),\n  investor_id: 'default_investor',\n  total_invested: xray.summary?.total_invested || 0,\n  current_value: xray.summary?.current_value || 0,\n  overall_xirr: xray.summary?.overall_xirr || 0,\n  health_score: health.overall_score || 0,\n  diversification_score: health.components?.diversification_score || 0,\n  cost_efficiency_score: health.components?.cost_efficiency_score || 0,\n  returns_quality_score: health.components?.returns_quality_score || 0,\n  liquidity_score: health.components?.liquidity_score || 0,\n  equity_pct: xray.asset_allocation?.equity_pct || 0,\n  debt_pct: xray.asset_allocation?.debt_pct || 0,\n  hybrid_pct: xray.asset_allocation?.hybrid_pct || 0,\n  covid_drawdown_pct: covidStress.estimated_portfolio_drawdown_pct || 0,\n  covid_recovery_months: covidStress.estimated_recovery_months || 0,\n  gfc_drawdown_pct: gfcStress.estimated_portfolio_drawdown_pct || 0,\n  gfc_recovery_months: gfcStress.estimated_recovery_months || 0,\n  active_flags: (health.flags || []).length,\n  high_severity_flags: (health.flags || []).filter(f => f.severity === 'high').length,\n  recommendation_summary: health.recommendation_summary || ''\n};\n\nreturn [{ json: record }];"
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000007",
+      "name": "Compute Composite Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO portfolio_health_daily (\n  recorded_at, investor_id, total_invested, current_value, overall_xirr,\n  health_score, diversification_score, cost_efficiency_score, returns_quality_score,\n  equity_pct, debt_pct, hybrid_pct, covid_drawdown_pct, covid_recovery_months,\n  gfc_drawdown_pct, active_flags, high_severity_flags\n) VALUES (\n  '{{ $json.recorded_at }}',\n  '{{ $json.investor_id }}',\n  {{ $json.total_invested }},\n  {{ $json.current_value }},\n  {{ $json.overall_xirr }},\n  {{ $json.health_score }},\n  {{ $json.diversification_score }},\n  {{ $json.cost_efficiency_score }},\n  {{ $json.returns_quality_score }},\n  {{ $json.equity_pct }},\n  {{ $json.debt_pct }},\n  {{ $json.hybrid_pct }},\n  {{ $json.covid_drawdown_pct }},\n  {{ $json.covid_recovery_months }},\n  {{ $json.gfc_drawdown_pct }},\n  {{ $json.active_flags }},\n  {{ $json.high_severity_flags }}\n);",
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000008",
+      "name": "Store to Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1280, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred",
+          "name": "Postgres DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-score-low",
+              "leftValue": "={{ $node['Compute Composite Metrics'].json.health_score }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000009",
+      "name": "Health Score Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '-100123456789' }}",
+        "text": "=⚠️ Portfolio Health Alert\n\nInvestor: {{ $node['Compute Composite Metrics'].json.investor_id }}\nHealth Score: {{ $node['Compute Composite Metrics'].json.health_score }}/100 (BELOW THRESHOLD)\n\nCurrent Value: ₹{{ ($node['Compute Composite Metrics'].json.current_value || 0).toLocaleString('en-IN') }}\nXIRR: {{ $node['Compute Composite Metrics'].json.overall_xirr }}%\n\nEquity Allocation: {{ $node['Compute Composite Metrics'].json.equity_pct }}%\nActive Flags: {{ $node['Compute Composite Metrics'].json.active_flags }}\nHigh Severity: {{ $node['Compute Composite Metrics'].json.high_severity_flags }}\n\nCOVID Drawdown: {{ $node['Compute Composite Metrics'].json.covid_drawdown_pct }}%\nGFC Drawdown: {{ $node['Compute Composite Metrics'].json.gfc_drawdown_pct }}%\n\nPlease review the portfolio dashboard immediately.",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000010",
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1720, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok-status",
+              "name": "status",
+              "value": "OK",
+              "type": "string"
+            },
+            {
+              "id": "ok-score",
+              "name": "health_score",
+              "value": "={{ $node['Compute Composite Metrics'].json.health_score }}",
+              "type": "number"
+            },
+            {
+              "id": "ok-msg",
+              "name": "message",
+              "value": "Health score above threshold. No alert sent.",
+              "type": "string"
+            },
+            {
+              "id": "ok-at",
+              "name": "checked_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c3d4e5f6-0003-0003-0003-000000000011",
+      "name": "Log OK Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1720, 400]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger - Daily 8AM": {
+      "main": [
+        [
+          {
+            "node": "Get Portfolio Xray",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Health Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Portfolio Xray": {
+      "main": [
+        [
+          {
+            "node": "Stress Test COVID 2020",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Health Score": {
+      "main": [
+        [
+          {
+            "node": "Stress Test GFC 2008",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stress Test COVID 2020": {
+      "main": [
+        [
+          {
+            "node": "Merge Stress Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stress Test GFC 2008": {
+      "main": [
+        [
+          {
+            "node": "Merge Stress Tests",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Stress Tests": {
+      "main": [
+        [
+          {
+            "node": "Compute Composite Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Composite Metrics": {
+      "main": [
+        [
+          {
+            "node": "Store to Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store to Postgres": {
+      "main": [
+        [
+          {
+            "node": "Health Score Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Score Alert?": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log OK Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "day3-v1-portfolio-xray",
+  "id": "day3-portfolio-xray",
+  "tags": [
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-workshop", "name": "workshop" },
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-day3", "name": "day3" }
+  ]
+}

@@ -1,0 +1,536 @@
+{
+  "name": "Day 6 - Smart Redemption Advisor with Human Gate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "redemption-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000001",
+      "name": "Webhook - Redemption Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 340],
+      "webhookId": "redemption-request-webhook-001"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-investor-id",
+              "name": "investor_id",
+              "value": "={{ $json.body.investor_id }}",
+              "type": "string"
+            },
+            {
+              "id": "set-investor-name",
+              "name": "investor_name",
+              "value": "={{ $json.body.investor_name }}",
+              "type": "string"
+            },
+            {
+              "id": "set-investor-email",
+              "name": "investor_email",
+              "value": "={{ $json.body.investor_email }}",
+              "type": "string"
+            },
+            {
+              "id": "set-amount",
+              "name": "redemption_amount",
+              "value": "={{ $json.body.redemption_amount }}",
+              "type": "number"
+            },
+            {
+              "id": "set-urgency",
+              "name": "urgency",
+              "value": "={{ $json.body.urgency || 'normal' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-purpose",
+              "name": "purpose",
+              "value": "={{ $json.body.purpose || 'not_specified' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-notes",
+              "name": "notes",
+              "value": "={{ $json.body.notes || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-req-id",
+              "name": "request_id",
+              "value": "={{ 'REQ-' + Date.now() }}",
+              "type": "string"
+            },
+            {
+              "id": "set-submitted",
+              "name": "submitted_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000002",
+      "name": "Extract Request Details",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [400, 340]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ request_id: $json.request_id, status: 'received', message: 'Your redemption request has been received and is being reviewed by our compliance team.', submitted_at: $json.submitted_at }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000003",
+      "name": "Acknowledge Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [620, 500]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a smart redemption plan for:\n\nInvestor: {{ $json.investor_name }} ({{ $json.investor_id }})\nRedemption Amount Required: ₹{{ $json.redemption_amount }}\nUrgency: {{ $json.urgency }}\nPurpose: {{ $json.purpose }}\nNotes: {{ $json.notes }}\n\nINSTRUCTIONS:\n1. Call getPortfolioXray to understand the current portfolio\n2. Call getSmartRedemptionPlan with redemption_amount={{ $json.redemption_amount }} and prefer_tax_efficiency=true\n3. Provide: which funds to redeem and amounts, LTCG/STCG tax implications, net amount after tax, settlement timeline.",
+        "options": {
+          "systemMessage": "You are a tax-aware portfolio redemption advisor. Always call getPortfolioXray first, then getSmartRedemptionPlan. Prioritize tax efficiency. Provide specific fund names and amounts. Format amounts in Indian numbering system with ₹ symbol.",
+          "maxIterations": 6
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000004",
+      "name": "AI Agent - Generate Redemption Plan",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [620, 280]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1500
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000005",
+      "name": "OpenAI GPT-4o",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [520, 480],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "connectionType": "sse",
+        "sseEndpoint": "https://app2.mfapis.club/mcp/portfolio-analytics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000006",
+      "name": "MCP - Portfolio Analytics",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [700, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $node['Extract Request Details'].json;\nconst agentOutput = $input.first().json.output || '';\n\nreturn [{\n  json: {\n    ...request,\n    ai_plan: agentOutput,\n    plan_generated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000007",
+      "name": "Format Plan Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 280]
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@yourfirm.com",
+        "toEmail": "compliance@yourfirm.com",
+        "subject": "=[Approval Required] Redemption — {{ $json.investor_name }} — ₹{{ $json.redemption_amount }} — {{ $json.urgency.toUpperCase() }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px}.header{background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0}.content{border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px}.plan{background:#f3f4f6;border-left:4px solid #3b82f6;padding:16px;border-radius:4px;white-space:pre-wrap;font-size:14px;line-height:1.6}.btn{display:inline-block;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:16px;margin:8px}.approve{background:#22c55e;color:white}.reject{background:#ef4444;color:white}</style></head><body><div class=\"header\"><h2 style=\"margin:0\">Redemption Approval Required</h2><p style=\"margin:4px 0 0\">Request ID: {{ $json.request_id }}</p></div><div class=\"content\"><p><strong>Investor:</strong> {{ $json.investor_name }} ({{ $json.investor_id }})</p><p><strong>Amount:</strong> ₹{{ $json.redemption_amount.toLocaleString('en-IN') }}</p><p><strong>Purpose:</strong> {{ $json.purpose }}</p><p><strong>Urgency:</strong> {{ $json.urgency }}</p><p><strong>Notes:</strong> {{ $json.notes || '(none)' }}</p><p><strong>Submitted:</strong> {{ $json.submitted_at }}</p><h3>AI-Generated Redemption Plan</h3><div class=\"plan\">{{ $json.ai_plan }}</div><h3>Your Decision</h3><p>Review the plan above and click your decision:</p><a href=\"{{ $execution.resumeUrl }}?decision=approve&reviewer=compliance\" class=\"btn approve\">APPROVE PLAN</a><a href=\"{{ $execution.resumeUrl }}?decision=reject&reason=manual_review_required\" class=\"btn reject\">REJECT PLAN</a><p style=\"color:#6b7280;font-size:13px\">Links expire in 24 hours. No response = escalation to senior advisor.</p></div></body></html>",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000008",
+      "name": "Email Compliance Team",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1080, 280],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "limitWaitTime": true,
+          "limitType": "afterTimeInterval",
+          "resumeAmount": 1440,
+          "resumeUnit": "minutes"
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000009",
+      "name": "Wait for Compliance Decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1300, 280],
+      "webhookId": "compliance-decision-webhook-001"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "cond-timeout",
+              "leftValue": "={{ $json.query?.decision }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000010",
+      "name": "Did It Time Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1520, 280]
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@yourfirm.com",
+        "toEmail": "senior-advisor@yourfirm.com",
+        "subject": "=[ESCALATION] Redemption Timeout — {{ $node['Extract Request Details'].json.investor_name }} — {{ $node['Extract Request Details'].json.request_id }}",
+        "emailType": "text",
+        "message": "=ESCALATION ALERT\n\nA redemption approval request has been pending for 24 hours without a decision.\n\nRequest ID: {{ $node['Extract Request Details'].json.request_id }}\nInvestor: {{ $node['Extract Request Details'].json.investor_name }}\nAmount: ₹{{ $node['Extract Request Details'].json.redemption_amount }}\nSubmitted: {{ $node['Extract Request Details'].json.submitted_at }}\n\nACTION REQUIRED: Please review and approve or reject immediately.\n\nApprove: {{ $execution.resumeUrl }}?decision=approve&reviewer=senior_advisor\nReject: {{ $execution.resumeUrl }}?decision=reject&reviewer=senior_advisor",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000011",
+      "name": "Email - Escalate to Senior Advisor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1740, 180],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "cond-approved",
+              "leftValue": "={{ $json.query?.decision }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000012",
+      "name": "Was It Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1740, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app2.mfapis.club/api/v2/portfolio/stage-redemption",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "request_id",
+              "value": "={{ $node['Extract Request Details'].json.request_id }}"
+            },
+            {
+              "name": "investor_id",
+              "value": "={{ $node['Extract Request Details'].json.investor_id }}"
+            },
+            {
+              "name": "approved_by",
+              "value": "={{ $json.query.reviewer }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000013",
+      "name": "Stage Redemption Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 280],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@yourfirm.com",
+        "toEmail": "={{ $node['Extract Request Details'].json.investor_email }}",
+        "subject": "Your Redemption Request Has Been Approved — ₹{{ $node['Extract Request Details'].json.redemption_amount }}",
+        "emailType": "text",
+        "message": "=Dear {{ $node['Extract Request Details'].json.investor_name }},\n\nYour redemption request has been reviewed and approved by our compliance team.\n\nRequest ID: {{ $node['Extract Request Details'].json.request_id }}\nApproved Amount: ₹{{ $node['Extract Request Details'].json.redemption_amount.toLocaleString('en-IN') }}\nApproved By: {{ $json.query.reviewer }}\nApproved At: {{ $now }}\n\nRedemption Plan:\n{{ $node['Format Plan Summary'].json.ai_plan }}\n\nPlease expect the proceeds in your bank account within 3-5 business days.\n\nRegards,\nCompliance Team",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000014",
+      "name": "Email Investor - Approved",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1960, 420],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@yourfirm.com",
+        "toEmail": "={{ $node['Extract Request Details'].json.investor_email }}",
+        "subject": "Your Redemption Request is Under Review",
+        "emailType": "text",
+        "message": "=Dear {{ $node['Extract Request Details'].json.investor_name }},\n\nYour redemption request (Request ID: {{ $node['Extract Request Details'].json.request_id }}) has been reviewed by our compliance team and requires additional review.\n\nOur team will contact you within 2 business days with further information.\n\nRegards,\nCompliance Team",
+        "options": {}
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000015",
+      "name": "Email Investor - Rejected",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1960, 540],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const request = $node['Extract Request Details'].json;\nconst queryData = $node['Wait for Compliance Decision'].json;\nconst decision = queryData?.query?.decision || 'timeout';\nconst reviewer = queryData?.query?.reviewer || 'unknown';\n\nreturn [{\n  json: {\n    audit_record: {\n      request_id: request.request_id,\n      investor_id: request.investor_id,\n      investor_name: request.investor_name,\n      redemption_amount: request.redemption_amount,\n      decision,\n      reviewer,\n      decided_at: new Date().toISOString(),\n      submitted_at: request.submitted_at,\n      ai_plan_preview: ($node['Format Plan Summary'].json.ai_plan || '').slice(0, 500)\n    }\n  }\n}];"
+      },
+      "id": "f6a7b8c9-0006-0006-0006-000000000016",
+      "name": "Log Audit Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Redemption Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Request Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Request Details": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent - Generate Redemption Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Generate Redemption Plan": {
+      "main": [
+        [
+          {
+            "node": "Format Plan Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Plan Summary": {
+      "main": [
+        [
+          {
+            "node": "Email Compliance Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Compliance Team": {
+      "main": [
+        [
+          {
+            "node": "Wait for Compliance Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Compliance Decision": {
+      "main": [
+        [
+          {
+            "node": "Did It Time Out?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Did It Time Out?": {
+      "main": [
+        [
+          {
+            "node": "Email - Escalate to Senior Advisor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Was It Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was It Approved?": {
+      "main": [
+        [
+          {
+            "node": "Stage Redemption Execution",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Investor - Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Investor - Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Investor - Approved": {
+      "main": [
+        [
+          {
+            "node": "Log Audit Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Investor - Rejected": {
+      "main": [
+        [
+          {
+            "node": "Log Audit Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4o": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Generate Redemption Plan",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Portfolio Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent - Generate Redemption Plan",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "day6-v1-human-approval",
+  "id": "day6-human-approval",
+  "tags": [
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-workshop", "name": "workshop" },
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-day6", "name": "day6" }
+  ]
+}

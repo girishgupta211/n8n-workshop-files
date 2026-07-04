@@ -1,0 +1,342 @@
+{
+  "name": "Day 4 - Institutional Alpha Scanner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDayOfWeek": [1],
+              "triggerAtHour": 7,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000001",
+      "name": "Schedule - Weekly Monday 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/amc_portfolio_disclosure",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "200"
+            },
+            {
+              "name": "month",
+              "value": "={{ new Date().toISOString().slice(0, 7) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000002",
+      "name": "Fetch Fund Holdings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/stocks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "type",
+              "value": "equity_screener"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000003",
+      "name": "Fetch Stoic Screener",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 420],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "wait",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000004",
+      "name": "Wait for Both Data Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const disclosureData = $node['Fetch Fund Holdings'].json;\nconst screenerData = $node['Fetch Stoic Screener'].json;\n\nconst stockToFunds = {};\nconst funds = Array.isArray(disclosureData) ? disclosureData : [disclosureData];\n\nfunds.forEach(fund => {\n  const holdings = fund.portfolio || [];\n  holdings.forEach(holding => {\n    const sym = holding.stock_symbol;\n    if (!sym) return;\n    if (!stockToFunds[sym]) {\n      stockToFunds[sym] = {\n        symbol: sym,\n        stock_name: holding.stock_name,\n        sector: holding.sector,\n        isin: holding.isin,\n        funds: []\n      };\n    }\n    stockToFunds[sym].funds.push({\n      fund_name: fund.fund_name,\n      amc_name: fund.amc_name,\n      pct_of_nav: holding.pct_of_nav,\n      market_value_cr: holding.market_value_cr,\n      month_change_pct: holding.month_change_pct || 0\n    });\n  });\n});\n\nconst screenerIndex = {};\nconst stocks = Array.isArray(screenerData) ? screenerData : [screenerData];\nstocks.forEach(s => {\n  if (s && s.symbol) screenerIndex[s.symbol] = s;\n});\n\nreturn [{ json: { stock_to_funds: stockToFunds, screener_index: screenerIndex } }];"
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000005",
+      "name": "Build Stock-to-Fund Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { stock_to_funds, screener_index } = $input.first().json;\n\nconst MIN_FUNDS = 3;\nconst MAX_RSI = 40;\n\nconst alphaSignals = [];\n\nObject.entries(stock_to_funds).forEach(([symbol, data]) => {\n  if (data.funds.length < MIN_FUNDS) return;\n  \n  const screener = screener_index[symbol];\n  if (!screener) return;\n  \n  const rsi = screener.technical?.rsi_14;\n  if (rsi === undefined || rsi >= MAX_RSI) return;\n  \n  const macd = screener.technical?.macd || 0;\n  const macdSignal = screener.technical?.macd_signal || 0;\n  const price = screener.last_price || 0;\n  const bbLower = screener.technical?.bb_lower || 0;\n  const sma200 = screener.technical?.sma_200 || 0;\n  \n  const nearBBLower = bbLower > 0 && price <= bbLower * 1.02;\n  const aboveSma200 = sma200 > 0 && price > sma200;\n  \n  const avgPctOfNav = data.funds.reduce((s, f) => s + (f.pct_of_nav || 0), 0) / data.funds.length;\n  const fundsBuying = data.funds.filter(f => f.month_change_pct > 0).length;\n  const fundsSelling = data.funds.filter(f => f.month_change_pct < 0).length;\n  \n  let signalScore = 0;\n  signalScore += (MAX_RSI - rsi);\n  signalScore += data.funds.length * 5;\n  if (nearBBLower) signalScore += 10;\n  if (aboveSma200) signalScore += 8;\n  if (fundsBuying > fundsSelling) signalScore += 5;\n  \n  alphaSignals.push({\n    symbol,\n    name: data.stock_name,\n    sector: data.sector,\n    last_price: price,\n    rsi_14: rsi,\n    macd_histogram: Math.round((macd - macdSignal) * 100) / 100,\n    near_bb_lower: nearBBLower,\n    above_sma_200: aboveSma200,\n    volume_ratio: screener.technical?.volume_ratio_20d || 0,\n    pct_from_52w_high: screener.technical?.pct_from_52w_high || 0,\n    pe: screener.fundamental?.pe,\n    roe: screener.fundamental?.roe,\n    fund_count: data.funds.length,\n    funds_holding: data.funds.map(f => f.fund_name),\n    avg_pct_of_nav: Math.round(avgPctOfNav * 100) / 100,\n    funds_adding: fundsBuying,\n    funds_trimming: fundsSelling,\n    signal_score: Math.round(signalScore * 10) / 10,\n    signal_strength: signalScore > 50 ? 'STRONG' : signalScore > 30 ? 'MODERATE' : 'WEAK'\n  });\n});\n\nalphaSignals.sort((a, b) => b.signal_score - a.signal_score);\n\nreturn [{\n  json: {\n    generated_at: new Date().toISOString(),\n    filter_criteria: { min_funds: MIN_FUNDS, max_rsi: MAX_RSI },\n    signal_count: alphaSignals.length,\n    signals: alphaSignals\n  }\n}];"
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000006",
+      "name": "Apply Alpha Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "out-date",
+              "name": "watchlist_date",
+              "value": "={{ $json.generated_at.slice(0, 10) }}",
+              "type": "string"
+            },
+            {
+              "id": "out-count",
+              "name": "total_signals",
+              "value": "={{ $json.signal_count }}",
+              "type": "number"
+            },
+            {
+              "id": "out-top",
+              "name": "top_10_signals",
+              "value": "={{ $json.signals.slice(0, 10) }}",
+              "type": "array"
+            },
+            {
+              "id": "out-strong",
+              "name": "strong_signals",
+              "value": "={{ $json.signals.filter(s => s.signal_strength === 'STRONG') }}",
+              "type": "array"
+            },
+            {
+              "id": "out-filter",
+              "name": "filter_used",
+              "value": "={{ JSON.stringify($json.filter_criteria) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000007",
+      "name": "Format Watchlist Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1280, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "cond-has-signals",
+              "leftValue": "={{ $json.total_signals }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000008",
+      "name": "Has Alpha Signals?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '-100123456789' }}",
+        "text": "=📊 Weekly Alpha Scanner Results — {{ $json.watchlist_date }}\n\nFound {{ $json.total_signals }} signals (RSI<40 + 3+ funds holding)\nStrong signals: {{ $json.strong_signals.length }}\n\nTop 5:\n{{ $json.top_10_signals.slice(0,5).map((s,i) => `${i+1}. ${s.symbol} (${s.name})\n   RSI: ${s.rsi_14} | Funds: ${s.fund_count} | Score: ${s.signal_score}\n   Sector: ${s.sector}`).join('\\n\\n') }}\n\nFull watchlist available in Airtable.",
+        "additionalFields": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000009",
+      "name": "Send Watchlist Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1720, 220],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "no-signals-msg",
+              "name": "message",
+              "value": "No alpha signals found this week. Filters: min 3 funds + RSI < 40.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0004-0004-0004-000000000010",
+      "name": "Log No Signals",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1720, 400]
+    }
+  ],
+  "connections": {
+    "Schedule - Weekly Monday 7AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fund Holdings",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Stoic Screener",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fund Holdings": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both Data Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Stoic Screener": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both Data Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wait for Both Data Sources": {
+      "main": [
+        [
+          {
+            "node": "Build Stock-to-Fund Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Stock-to-Fund Index": {
+      "main": [
+        [
+          {
+            "node": "Apply Alpha Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Alpha Filter": {
+      "main": [
+        [
+          {
+            "node": "Format Watchlist Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Watchlist Output": {
+      "main": [
+        [
+          {
+            "node": "Has Alpha Signals?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alpha Signals?": {
+      "main": [
+        [
+          {
+            "node": "Send Watchlist Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log No Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "day4-v1-alpha-scanner",
+  "id": "day4-alpha-scanner",
+  "tags": [
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-workshop", "name": "workshop" },
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-day4", "name": "day4" }
+  ]
+}
