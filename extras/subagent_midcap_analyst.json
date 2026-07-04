@@ -1,0 +1,367 @@
+{
+  "name": "Subworkflow - Midcap Analyst",
+  "nodes": [
+    {
+      "id": "midcap-webhook-trigger-node",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        200
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "scheme_id",
+              "type": "string"
+            },
+            {
+              "name": "scheme_name",
+              "type": "string"
+            },
+            {
+              "name": "category",
+              "type": "string"
+            },
+            {
+              "name": "aum",
+              "type": "number"
+            },
+            {
+              "name": "expense_ratio",
+              "type": "number"
+            },
+            {
+              "name": "isin",
+              "type": "string"
+            },
+            {
+              "name": "amc_name",
+              "type": "string"
+            },
+            {
+              "name": "data",
+              "type": "object"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "midcap-validation-node",
+      "name": "Validate Input Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nif (items.length === 0) {\n  return [{ json: { isValid: false, error: \"Empty input payload\" } }];\n}\nconst body = items[0].json;\n\nlet isValid = true;\nlet errorReason = \"\";\n\nconst required = ['scheme_id', 'scheme_name', 'category', 'data'];\nfor (const field of required) {\n  if (body[field] === undefined || body[field] === null) {\n    isValid = false;\n    errorReason = `Missing required field: ${field}`;\n    break;\n  }\n}\n\nif (isValid) {\n  const data = body.data;\n  if (!data.nav_history || !Array.isArray(data.nav_history) || !data.holdings || !Array.isArray(data.holdings) || !data.risk_metrics || typeof data.risk_metrics !== 'object') {\n    isValid = false;\n    errorReason = \"Field 'data' must contain nav_history (array), holdings (array), and risk_metrics (object)\";\n  }\n}\n\nreturn [{\n  json: {\n    ...body,\n    isValid: isValid,\n    error: errorReason\n  }\n}];"
+      }
+    },
+    {
+      "id": "midcap-if-schema-valid",
+      "name": "If Schema Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        650,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-schema-valid",
+              "leftValue": "={{ $json.isValid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "midcap-error-formatter",
+      "name": "Format Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst errorReason = items[0]?.json?.error || \"Unknown validation error\";\n\nreturn [{\n  json: {\n    success: false,\n    error: errorReason\n  }\n}];"
+      }
+    },
+    {
+      "id": "midcap-agent-node",
+      "name": "Midcap Analyst Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        900,
+        200
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Conduct a midcap fund analysis query for scheme: {{ $json.scheme_name }}",
+        "options": {
+          "systemMessage": "=You are a specialized Midcap Mutual Fund Analyst. Your task is to evaluate mid-capitalization equity funds based on data passed in the input.\nYour analysis must cover:\n1. **Midcap Suitability & Mandate**: Confirm if the holdings align with mid-cap mandates (companies ranked 101-250 by market cap in India, typically representing agile companies with high growth potential but higher volatility than large-caps).\n2. **Growth vs Risk**: Analyze risk-adjusted performance using Sharpe Ratio, Beta, Alpha, and Volatility (Standard Deviation) from the input. Explain how these metrics reflect the fund's risk profile relative to the Nifty Midcap 150 benchmark.\n3. **Holdings & Sector Concentration**: Evaluate the top holdings and sector exposures. Highlight any single-stock concentration (>5%) or sector overweighting (>25%) which increases idiosyncratic risk.\n4. **CAGR & Volatility calculations**: Use the tools cagr_calculator and volatility_calculator to verify the metrics dynamically from the raw NAV history. Explain the computed CAGR values (1Y, 3Y, 5Y, 10Y if available) and computed volatility parameters (annualized volatility, Sharpe ratio, maximum drawdown).\n5. **Trade/Reallocation Approval**: If you recommend any reallocation or trade adjustment, you MUST call the tool 'prepare_trade'. Pass the scheme_name, reallocation_pct (e.g. 15 for 15%), and std_dev (computed using volatility_calculator). You must explain in your recommendation whether the trade was approved or rejected by the system.\n\nFormat your output in clean Markdown under clear headings. Be objective, precise, and numerical. Highlight key metrics. Do not invent facts or numbers.\n\nInput Data:\nScheme Name: {{ $json.scheme_name }}\nCategory: {{ $json.category }}\nAUM: ₹{{ $json.aum }} Crores\nExpense Ratio: {{ $json.expense_ratio }}%\nHoldings: {{ JSON.stringify($json.data.holdings) }}\nRisk Metrics: Sharpe: {{ $json.data.risk_metrics?.sharpe }}, Beta: {{ $json.data.risk_metrics?.beta }}, StdDev: {{ $json.data.risk_metrics?.std_dev }}\nRaw NAV history: {{ JSON.stringify($json.data.nav_history) }}",
+          "maxIterations": 25
+        }
+      }
+    },
+    {
+      "id": "midcap-openai-model-node",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        830,
+        480
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "abacusai/dracarys-llama-3.1-70B-instruct"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "temperature": 0,
+          "baseURL": "https://integrate.api.nvidia.com/v1"
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "9HEWVGUOT0gEvWvr",
+          "name": "nvidiaApi"
+        }
+      }
+    },
+    {
+      "id": "midcap-memory-node",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        970,
+        480
+      ],
+      "parameters": {
+        "contextWindowLength": 50,
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.scheme_id || 'midcap-analyst-session' }}"
+      }
+    },
+    {
+      "id": "midcap-respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "midcap-tool-cagr",
+      "name": "cagr_calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        740,
+        600
+      ],
+      "parameters": {
+        "name": "cagr_calculator",
+        "description": "Calculates Compounded Annual Growth Rate (CAGR) for 1Y, 3Y, 5Y, and 10Y intervals from a provided array of historical NAV data containing date and nav values.",
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"nav_history\": [\n    {\n      \"date\": \"02-07-2026\",\n      \"nav\": 94.234\n    }\n  ]\n}",
+        "jsCode": "const navHistory = query.nav_history || [];\nif (!Array.isArray(navHistory) || navHistory.length < 2) {\n  return JSON.stringify({ error: \"Insufficient NAV history data. Must have at least 2 points.\" });\n}\n\nfunction parseDate(dStr) {\n  if (!dStr) return null;\n  const parts = dStr.split('-');\n  if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {\n    return new Date(parts[2], parts[1] - 1, parts[0]);\n  }\n  return new Date(dStr);\n}\n\nconst historyObj = navHistory.map(item => {\n  return {\n    date: parseDate(item.date),\n    nav: parseFloat(item.nav)\n  };\n}).filter(item => item.date !== null && !isNaN(item.date.getTime()) && !isNaN(item.nav))\n  .sort((a, b) => a.date - b.date);\n\nif (historyObj.length < 20) {\n  return JSON.stringify({ error: \"Insufficient valid NAV history records. Minimum 20 records required.\" });\n}\n\nconst endPoint = historyObj[historyObj.length - 1];\nconst endNav = endPoint.nav;\nconst endDate = endPoint.date;\n\nfunction calculateCAGRForYears(years) {\n  const targetTime = endDate.getTime() - (years * 365.25 * 24 * 60 * 60 * 1000);\n  let closestItem = historyObj[0];\n  let minDiff = Math.abs(closestItem.date.getTime() - targetTime);\n  \n  for (let i = 1; i < historyObj.length; i++) {\n    const diff = Math.abs(historyObj[i].date.getTime() - targetTime);\n    if (diff < minDiff) {\n      minDiff = diff;\n      closestItem = historyObj[i];\n    }\n  }\n  \n  const diffDays = Math.abs(closestItem.date.getTime() - targetTime) / (1000 * 60 * 60 * 24);\n  if (diffDays > 45) {\n    return null;\n  }\n  \n  const startNav = closestItem.nav;\n  if (startNav <= 0 || endNav <= 0) return null;\n  \n  const actualYears = (endDate.getTime() - closestItem.date.getTime()) / (365.25 * 24 * 60 * 60 * 1000);\n  if (actualYears <= 0.1) return null;\n  \n  const cagr = Math.pow(endNav / startNav, 1 / actualYears) - 1;\n  return cagr;\n}\n\nconst result = {\n  cagr_1y: calculateCAGRForYears(1),\n  cagr_3y: calculateCAGRForYears(3),\n  cagr_5y: calculateCAGRForYears(5),\n  cagr_10y: calculateCAGRForYears(10)\n};\n\nreturn JSON.stringify(result);"
+      }
+    },
+    {
+      "id": "midcap-tool-volatility",
+      "name": "volatility_calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        900,
+        600
+      ],
+      "parameters": {
+        "name": "volatility_calculator",
+        "description": "Calculates risk metrics including annualized standard deviation (volatility), Sharpe Ratio (using risk-free rate of 6.5%), and maximum drawdown statistics from historical NAV data.",
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"nav_history\": [\n    {\n      \"date\": \"02-07-2026\",\n      \"nav\": 94.234\n    }\n  ]\n}",
+        "jsCode": "const navHistory = query.nav_history || [];\nif (!Array.isArray(navHistory) || navHistory.length < 5) {\n  return JSON.stringify({ error: \"Insufficient NAV history data for volatility analysis.\" });\n}\n\nfunction parseDate(dStr) {\n  if (!dStr) return null;\n  const parts = dStr.split('-');\n  if (parts.length === 3 && parts[0].length === 2 && parts[2].length === 4) {\n    return new Date(parts[2], parts[1] - 1, parts[0]);\n  }\n  return new Date(dStr);\n}\n\nconst historyObj = navHistory.map(item => {\n  return {\n    date: parseDate(item.date),\n    nav: parseFloat(item.nav)\n  };\n}).filter(item => item.date !== null && !isNaN(item.date.getTime()) && !isNaN(item.nav))\n  .sort((a, b) => a.date - b.date);\n\nif (historyObj.length < 5) {\n  return JSON.stringify({ error: \"Insufficient valid NAV history data.\" });\n}\n\nconst returns = [];\nfor (let i = 1; i < historyObj.length; i++) {\n  const prevNav = historyObj[i - 1].nav;\n  const currNav = historyObj[i].nav;\n  if (prevNav > 0) {\n    returns.push((currNav - prevNav) / prevNav);\n  }\n}\n\nif (returns.length < 4) {\n  return JSON.stringify({ error: \"Insufficient daily returns.\" });\n}\n\nconst meanReturn = returns.reduce((a, b) => a + b, 0) / returns.length;\nconst variance = returns.reduce((sum, r) => sum + Math.pow(r - meanReturn, 2), 0) / (returns.length - 1);\nconst dailyStdDev = Math.sqrt(variance);\nconst annualizedVolatility = dailyStdDev * Math.sqrt(252);\n\nconst startNav = historyObj[0].nav;\nconst endNav = historyObj[historyObj.length - 1].nav;\nconst startYear = historyObj[0].date.getFullYear() + (historyObj[0].date.getMonth() / 12) + (historyObj[0].date.getDate() / 365);\nconst endYear = historyObj[historyObj.length - 1].date.getFullYear() + (historyObj[historyObj.length - 1].date.getMonth() / 12) + (historyObj[historyObj.length - 1].date.getDate() / 365);\nconst totalYears = endYear - startYear;\n\nlet SharpeRatio = null;\nif (totalYears > 0.1 && startNav > 0 && endNav > 0 && annualizedVolatility > 0) {\n  const annualizedReturn = Math.pow(endNav / startNav, 1 / totalYears) - 1;\n  const riskFreeRate = 0.065;\n  SharpeRatio = (annualizedReturn - riskFreeRate) / annualizedVolatility;\n}\n\nlet peak = -Infinity;\nlet maxDrawdown = 0;\nfor (let i = 0; i < historyObj.length; i++) {\n  const nav = historyObj[i].nav;\n  if (nav > peak) {\n    peak = nav; \n  }\n  const drawdown = (nav - peak) / peak;\n  if (drawdown < maxDrawdown) {\n    maxDrawdown = drawdown;\n  }\n}\n\nconst result = {\n  annualized_volatility: annualizedVolatility,\n  sharpe_ratio: SharpeRatio,\n  max_drawdown: maxDrawdown,\n  total_years_analyzed: totalYears\n};\n\nreturn JSON.stringify(result);"
+      }
+    },
+    {
+      "id": "midcap-tool-prep-trade",
+      "name": "Workflow - Prepare Trade",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1060,
+        600
+      ],
+      "parameters": {
+        "name": "prepare_trade",
+        "description": "Call this tool to stage a proposed mutual fund reallocation trade. You MUST pass the scheme_name, reallocation_pct (numeric value, e.g. 15 for 15%), and std_dev (standard deviation from the volatility calculator). Returns status 'approved' or 'rejected'.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "prepare_trade_subworkflow_id",
+          "cachedResultName": "Subworkflow - Prepare Trade"
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"scheme_name\": \"string\",\n  \"reallocation_pct\": 15,\n  \"std_dev\": 22.5\n}"
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Validate Input Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input Schema": {
+      "main": [
+        [
+          {
+            "node": "If Schema Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Schema Valid": {
+      "main": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cagr_calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "volatility_calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow - Prepare Trade": {
+      "ai_tool": [
+        [
+          {
+            "node": "Midcap Analyst Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Midcap Analyst Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

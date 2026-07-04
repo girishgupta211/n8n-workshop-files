@@ -1,0 +1,485 @@
+{
+  "name": "Subworkflow - Data Layer",
+  "nodes": [
+    {
+      "id": "webhook-trigger-node",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1400,
+        200
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "query",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "search-premium-node",
+      "name": "Search Premium Scheme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1100,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme?page=1&limit=1&q={{ encodeURIComponent($json.query) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": false,
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "mfapisXApiKey"
+        }
+      }
+    },
+    {
+      "id": "if-search-success-node",
+      "name": "If Premium Search Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -800,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "conditions-search-success",
+              "leftValue": "={{ $json.body.data?.list?.length || $json.body.data?.length || $json.body.length || 0 }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fetch-detail-premium-node",
+      "name": "Fetch Scheme Detail (Premium)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -500,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme/{{ $json.body.data?.list?.[0]?.id || $json.body.data?.[0]?.id || $json.body?.[0]?.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": false,
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "mfapisXApiKey"
+        }
+      }
+    },
+    {
+      "id": "if-detail-success-node",
+      "name": "If Premium Detail Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -200,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "conditions-detail-success",
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fetch-factsheet-premium-node",
+      "name": "Fetch Factsheet (Premium)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        100,
+        50
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme/factsheet/{{ $json.body.data?.scheme_isin || $json.body.data?.isin || $json.body?.scheme_isin || $json.body?.isin }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": false,
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "mfapisXApiKey"
+        }
+      }
+    },
+    {
+      "id": "fetch-nav-premium-node",
+      "name": "Fetch NAV History (Premium)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        250,
+        50
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/nav/{{ $node[\"Fetch Scheme Detail (Premium)\"].json.body.data?.id || $node[\"Fetch Scheme Detail (Premium)\"].json.body.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": false,
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "mfapisXApiKey"
+        }
+      }
+    },
+    {
+      "id": "unified-parser-premium-node",
+      "name": "Unified Output Parser (Premium)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        50
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+  "jsCode": "const items = $input.all();\nconst premiumEnvelope = $('Fetch Scheme Detail (Premium)').first().json.body || $('Fetch Scheme Detail (Premium)').first().json || {};\nconst detailResponse = premiumEnvelope.data || premiumEnvelope || {};\nconst factsheetResponse = $('Fetch Factsheet (Premium)').first().json.body?.data || $('Fetch Factsheet (Premium)').first().json.body || {};\nconst navResponse = $('Fetch NAV History (Premium)').first().json.body?.data || $('Fetch NAV History (Premium)').first().json.data || [];\n\nconst formatDate = (epochMs) => {\n  const d = new Date(epochMs);\n  const day = String(d.getDate()).padStart(2, '0');\n  const month = String(d.getMonth() + 1).padStart(2, '0');\n  const year = d.getFullYear();\n  return day + '-' + month + '-' + year;\n};\n\nconst navHistory = Array.isArray(navResponse) ? navResponse.map(n => ({\n  date: formatDate(n[0]),\n  nav: parseFloat(n[1]) || 0\n})) : [];\n\nconst mfData = detailResponse.mf_data || {};\nconst schemeList = Array.isArray(mfData.scheme) ? mfData.scheme : [];\nconst scheme0 = schemeList[0] || {};\nconst riskList = Array.isArray(mfData.risk_volatility) ? mfData.risk_volatility : [];\nconst risk3 = riskList.find((entry) => Number(entry?.period_years) === 3 || String(entry?.period_years) === '3') || riskList[0] || {};\n\nconst holdings = (mfData.equity_holdings || detailResponse.holdings || []).map(h => ({\n  security: h.holding_name || h.security_name || h.Holding_Name || h.name || \"\",\n  weight: parseFloat(h.portfolio_weight || h.weight_percent || h.Portfolio_Weight || h.weight) || 0\n}));\n\nconst aumRaw = parseFloat(scheme0.total_assets ?? scheme0.aum ?? detailResponse.aum ?? detailResponse.total_aum ?? detailResponse.Asset_Size);\nconst aum = Number.isFinite(aumRaw) ? Math.round(aumRaw / 1e7) : NaN; // convert rupees → Crores\nconst expenseRatio = parseFloat(scheme0.expense_ratio ?? detailResponse.expense_ratio ?? detailResponse.ter);\nconst riskShapre = parseFloat(risk3.sharpe_ratio ?? risk3.sharpe ?? detailResponse.risk_metrics?.sharpe_ratio ?? detailResponse.sharpe_ratio);\nconst riskBeta = parseFloat(risk3.beta ?? detailResponse.risk_metrics?.beta ?? detailResponse.beta);\nconst riskAlpha = parseFloat(risk3.alpha ?? detailResponse.risk_metrics?.alpha ?? detailResponse.alpha);\nconst riskStdDev = parseFloat(risk3.standard_deviation ?? risk3.std_dev ?? risk3.standard_deviation_pct ?? detailResponse.risk_metrics?.standard_deviation ?? detailResponse.standard_deviation);\n\nconst output = {\n  scheme_code: String(detailResponse.scheme_code || detailResponse.scheme_amfi_code || detailResponse.amfi_code || detailResponse.BSE_Code || scheme0.scheme_code || \"\"),\n  isin: String(detailResponse.scheme_isin || detailResponse.isin || detailResponse.schemeISIN || scheme0.isin || factsheetResponse.isin || \"\"),\n  amc_name: detailResponse.fund_house || detailResponse.amc_name || detailResponse.asset_manager || scheme0.fund_house || factsheetResponse.fund_name || \"\",\n  name: detailResponse.name || detailResponse.scheme_name || scheme0.scheme_name || \"\",\n  nav_history: navHistory,\n  enriched: true,\n  holdings: holdings,\n  aum: Number.isFinite(aum) ? aum : null,\n  expense_ratio: Number.isFinite(expenseRatio) ? expenseRatio : null,\n  risk_metrics: {\n    sharpe: Number.isFinite(riskShapre) ? riskShapre : null,\n    beta: Number.isFinite(riskBeta) ? riskBeta : null,\n    alpha: Number.isFinite(riskAlpha) ? riskAlpha : null,\n    std_dev: Number.isFinite(riskStdDev) ? riskStdDev : null\n  },\n  factsheet_url: factsheetResponse.factsheet_url || factsheetResponse.link || factsheetResponse.pdf_link || detailResponse.factsheet_url || null\n};\n\nreturn [{ json: output }];"
+      }
+    },
+    {
+      "id": "respond-success-premium-node",
+      "name": "Respond Success (Premium)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        50
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "search-public-node",
+      "name": "Search Public Scheme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -600,
+        350
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mfapi.in/mf/search?q={{ encodeURIComponent($node[\"When Executed by Another Workflow\"].json.query) }}",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "extract-first-scheme-node",
+      "name": "Extract First Scheme",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -350,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nreturn items.length > 0 ? [{ json: items[0].json }] : [];"
+      }
+    },
+    {
+      "id": "fetch-public-details-node",
+      "name": "Fetch Public Details (NAV History)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -100,
+        350
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mfapi.in/mf/{{ $json.schemeCode }}",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "unified-parser-fallback-node",
+      "name": "Unified Output Parser (Fallback)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        150,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+  "jsCode": "const items = $input.all();\nconst publicDetails = $('Fetch Public Details (NAV History)').first().json.body || $('Fetch Public Details (NAV History)').first().json || {};\n\nconst meta = publicDetails.meta || {};\nconst rawData = publicDetails.data || [];\n\nconst navHistory = rawData.map(n => ({\n  date: n.date,\n  nav: parseFloat(n.nav) || 0\n}));\n\nconst output = {\n  scheme_code: String(meta.scheme_code || \"\"),\n  isin: String(meta.scheme_isin || meta.isin || \"\"),\n  amc_name: meta.fund_house || meta.amc_name || \"\",\n  name: meta.scheme_name || \"\",\n  nav_history: navHistory,\n  enriched: false,\n  holdings: [],\n  aum: null,\n  expense_ratio: null,\n  risk_metrics: {\n    sharpe: null,\n    beta: null,\n    alpha: null,\n    std_dev: null\n  },\n  factsheet_url: null\n};\n\nreturn [{ json: output }];"
+      }
+    },
+    {
+      "id": "respond-fallback-public-node",
+      "name": "Respond Fallback (Public)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all();"
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Search Premium Scheme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Premium Scheme": {
+      "main": [
+        [
+          {
+            "node": "If Premium Search Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Premium Search Success": {
+      "main": [
+        [
+          {
+            "node": "Fetch Scheme Detail (Premium)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Public Scheme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Scheme Detail (Premium)": {
+      "main": [
+        [
+          {
+            "node": "If Premium Detail Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Premium Detail Success": {
+      "main": [
+        [
+          {
+            "node": "Fetch Factsheet (Premium)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Public Scheme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Factsheet (Premium)": {
+      "main": [
+        [
+          {
+            "node": "Fetch NAV History (Premium)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch NAV History (Premium)": {
+      "main": [
+        [
+          {
+            "node": "Unified Output Parser (Premium)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unified Output Parser (Premium)": {
+      "main": [
+        [
+          {
+            "node": "Respond Success (Premium)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Public Scheme": {
+      "main": [
+        [
+          {
+            "node": "Extract First Scheme",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract First Scheme": {
+      "main": [
+        [
+          {
+            "node": "Fetch Public Details (NAV History)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Details (NAV History)": {
+      "main": [
+        [
+          {
+            "node": "Unified Output Parser (Fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unified Output Parser (Fallback)": {
+      "main": [
+        [
+          {
+            "node": "Respond Fallback (Public)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

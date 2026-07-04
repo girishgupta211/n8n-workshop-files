@@ -1,0 +1,256 @@
+{
+  "name": "Subworkflow - Prepare Trade",
+  "nodes": [
+    {
+      "id": "prep-webhook-trigger",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        200
+      ],
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "scheme_name",
+              "type": "string"
+            },
+            {
+              "name": "reallocation_pct",
+              "type": "number"
+            },
+            {
+              "name": "std_dev",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prep-if-escalate",
+      "name": "If High Risk (Escalate)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        300,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "cond-realloc-threshold",
+              "leftValue": "={{ parseFloat($json.reallocation_pct) }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 10
+            },
+            {
+              "id": "cond-stddev-threshold",
+              "leftValue": "={{ parseFloat($json.std_dev) > 22 || (parseFloat($json.std_dev) > 0.22 && parseFloat($json.std_dev) < 1.0) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prep-auto-approve-response",
+      "name": "Auto-Approved Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        350
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { status: \"approved\", reason: \"Below risk thresholds (reallocation <= 10% and StdDev <= 22%)\" } }];"
+      }
+    },
+    {
+      "id": "prep-send-email",
+      "name": "Send Approval Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        500,
+        100
+      ],
+      "parameters": {
+        "fromEmail": "reviewer-alerts@company.com",
+        "toEmail": "analyst-lead@company.com",
+        "subject": "[URGENT] Reallocation Approval Required",
+        "emailFormat": "html",
+        "html": "=<h3>[URGENT] Mutual Fund Reallocation Approval Required</h3>\n<p>A high-risk mutual fund reallocation has been proposed by the AI Analyst pipeline and requires human sign-off.</p>\n<ul>\n  <li><strong>Fund Name:</strong> {{ $node[\"When Executed by Another Workflow\"].json.scheme_name }}</li>\n  <li><strong>Proposed Reallocation Weight:</strong> {{ $node[\"When Executed by Another Workflow\"].json.reallocation_pct }}%</li>\n  <li><strong>Fund Standard Deviation (Volatility):</strong> {{ $node[\"When Executed by Another Workflow\"].json.std_dev }}%</li>\n</ul>\n<p>Please review and choose an action below:</p>\n<a href=\"{{ $execution.resumeUrl }}?action=approve\" style=\"background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;\">Approve Reallocation</a>\n<a href=\"{{ $execution.resumeUrl }}?action=reject\" style=\"background-color: #f44336; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;\">Reject Reallocation</a>"
+      }
+    },
+    {
+      "id": "prep-wait-reviewer",
+      "name": "Wait for Reviewer",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        100
+      ],
+      "parameters": {
+        "resume": "webhook",
+        "incomingAuthentication": "none"
+      }
+    },
+    {
+      "id": "prep-if-approved",
+      "name": "If Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-action-approve",
+              "leftValue": "={{ $json.query ? $json.query.action : '' }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "approve"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "prep-approved-response",
+      "name": "Approved Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        50
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"approved\",\n  \"reason\": \"Approved by human reviewer\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "prep-rejected-response",
+      "name": "Rejected Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"rejected\",\n  \"reason\": \"Rejected by human reviewer\"\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "If High Risk (Escalate)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If High Risk (Escalate)": {
+      "main": [
+        [
+          {
+            "node": "Send Approval Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto-Approved Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Approval Email": {
+      "main": [
+        [
+          {
+            "node": "Wait for Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Reviewer": {
+      "main": [
+        [
+          {
+            "node": "If Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Approved": {
+      "main": [
+        [
+          {
+            "node": "Approved Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

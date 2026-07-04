@@ -1,0 +1,476 @@
+{
+  "name": "MF Alpha Dashboard — Visual",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Dashboard Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2800,
+        300
+      ],
+      "parameters": {
+        "path": "mf-alpha-dashboard",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "mf-alpha-dashboard"
+    },
+    {
+      "id": "n-lc",
+      "name": "Fetch Large Cap Funds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2500,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/public/scheme",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "large cap"
+            },
+            {
+              "name": "plan",
+              "value": "Direct"
+            },
+            {
+              "name": "option",
+              "value": "Growth"
+            },
+            {
+              "name": "sort_by",
+              "value": "aum"
+            },
+            {
+              "name": "sort_dir",
+              "value": "desc"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n-fc",
+      "name": "Fetch Flexi Cap Funds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2200,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/public/scheme",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "flexi cap"
+            },
+            {
+              "name": "plan",
+              "value": "Direct"
+            },
+            {
+              "name": "option",
+              "value": "Growth"
+            },
+            {
+              "name": "sort_by",
+              "value": "aum"
+            },
+            {
+              "name": "sort_dir",
+              "value": "desc"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "n-mc",
+      "name": "Fetch Mid Cap Funds",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1900,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://app2.mfapis.club/api/v2/public/scheme",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "mid cap"
+            },
+            {
+              "name": "plan",
+              "value": "Direct"
+            },
+            {
+              "name": "option",
+              "value": "Growth"
+            },
+            {
+              "name": "sort_by",
+              "value": "aum"
+            },
+            {
+              "name": "sort_dir",
+              "value": "desc"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "extract-ids",
+      "name": "Extract Fund IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1600,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function pick(node) {\n  const f = $(`${node}`).first().json?.data?.list?.[0];\n  return f ? { id: f.id, isin: f.scheme_isin, name: f.name, short: f.name?.split(' - ')[0] } : null;\n}\nreturn [{ json: { largeCap: pick('Fetch Large Cap Funds'), flexiCap: pick('Fetch Flexi Cap Funds'), midCap: pick('Fetch Mid Cap Funds') } }];"
+      }
+    },
+    {
+      "id": "chg-lc",
+      "name": "Holdings: Large Cap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1300,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/amc_portfolio_disclosure/scheme/{{ $('Extract Fund IDs').first().json.largeCap.isin }}/holding-changes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "chg-fc",
+      "name": "Holdings: Flexi Cap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1000,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/amc_portfolio_disclosure/scheme/{{ $('Extract Fund IDs').first().json.flexiCap.isin }}/holding-changes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "chg-mc",
+      "name": "Holdings: Mid Cap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -700,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/amc_portfolio_disclosure/scheme/{{ $('Extract Fund IDs').first().json.midCap.isin }}/holding-changes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_API_KEY_HERE"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "compute-signals",
+      "name": "Compute All Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ids = $('Extract Fund IDs').first().json;\nfunction getH(node) { return $(`${node}`).first().json?.data?.holdings ?? []; }\n\nconst funds = [\n  { name: ids.largeCap?.short ?? 'Large Cap', h: getH('Holdings: Large Cap') },\n  { name: ids.flexiCap?.short ?? 'Flexi Cap', h: getH('Holdings: Flexi Cap') },\n  { name: ids.midCap?.short   ?? 'Mid Cap',   h: getH('Holdings: Mid Cap') }\n];\n\n// holding-changes fields: security_name, latest_weight, industry, status, absolute_change\n// Use latest_weight as portfolio weight — works for all 4 strategies\n\n// --- S1: Conviction Clustering (held at ≥2% by 2+ AMCs) ---\nconst cmap = {};\nfunds.forEach(fund => {\n  const sorted = [...fund.h].sort((a,b)=>(b.latest_weight??0)-(a.latest_weight??0));\n  sorted.forEach((h, idx) => {\n    const wt = h.latest_weight ?? 0;\n    if (wt < 2) return;\n    const k = h.security_name;\n    if (!cmap[k]) cmap[k] = { stock: k, sector: h.industry, amcs: [], weights: [], total: 0 };\n    cmap[k].amcs.push(fund.name); cmap[k].weights.push(wt); cmap[k].total += wt;\n  });\n});\nconst conviction = Object.values(cmap).filter(s=>s.amcs.length>=2).map(s=>{\n  const avg = s.total/s.amcs.length;\n  const score = parseFloat((avg*s.amcs.length).toFixed(2));\n  const conf  = Math.min(100, Math.round((s.amcs.length/3)*40 + Math.min(40,avg*4) + 20));\n  return { stock:s.stock, sector:s.sector, amc_count:s.amcs.length, amcs:s.amcs,\n           avg_weight:parseFloat(avg.toFixed(2)), conviction_score:score, confidence:conf };\n}).sort((a,b)=>b.conviction_score-a.conviction_score).slice(0,8);\n\n// --- S2: Alpha Basket ---\nconst bmap = {};\nfunds.forEach(fund=>{\n  fund.h.forEach(h=>{\n    const wt=h.latest_weight??0;\n    if(!bmap[h.security_name]) bmap[h.security_name]={stock:h.security_name,sector:h.industry,total:0,count:0};\n    bmap[h.security_name].total+=wt; bmap[h.security_name].count+=1;\n  });\n});\nconst basket = Object.values(bmap).map(s=>({stock:s.stock,sector:s.sector,\n  score:parseFloat((s.count*(s.total/s.count)).toFixed(2))})).sort((a,b)=>b.score-a.score).slice(0,10);\n\n// --- S3: Sector Flow ---\nconst fall = [\n  ...getH('Holdings: Large Cap'), ...getH('Holdings: Flexi Cap'), ...getH('Holdings: Mid Cap')\n];\nconst fmap = {};\nfall.forEach(h=>{\n  const sec=h.industry||h.bucket||'Other';\n  const chg=h.absolute_change??0;\n  if(!fmap[sec]) fmap[sec]={sector:sec,net:0,added:0,removed:0,drivers:[]};\n  fmap[sec].net+=chg;\n  if(h.status==='added')   fmap[sec].added++;\n  if(h.status==='removed') fmap[sec].removed++;\n  if(Math.abs(chg)>0.1)   fmap[sec].drivers.push({stock:h.security_name,chg:parseFloat(chg.toFixed(2))});\n});\nconst sectors = Object.values(fmap).filter(s=>s.sector!=='Other').map(s=>({\n  ...s, net:parseFloat(s.net.toFixed(2)),\n  drivers:s.drivers.sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,3)\n})).sort((a,b)=>b.net-a.net).slice(0,8);\n\n// --- S4: New Entries across 2+ AMCs ---\nconst nmap = {};\nfunds.forEach(({name,h})=>{\n  h.filter(x=>x.status==='added').forEach(x=>{\n    if(!nmap[x.security_name]) nmap[x.security_name]={stock:x.security_name,sector:x.industry,amcs:[],max_wt:0};\n    nmap[x.security_name].amcs.push({fund:name,wt:x.latest_weight??0});\n    if((x.latest_weight??0)>nmap[x.security_name].max_wt) nmap[x.security_name].max_wt=x.latest_weight??0;\n  });\n});\nconst newEntries = Object.values(nmap).filter(s=>s.amcs.length>=2)\n  .sort((a,b)=>b.amcs.length-a.amcs.length||b.max_wt-a.max_wt).slice(0,8);\n\nreturn [{ json: { funds:funds.map(f=>f.name), conviction, basket, sectors, newEntries, generated:new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "generate-html",
+      "name": "Generate Dashboard HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst { conviction=[], basket=[], sectors=[], newEntries=[], funds=[], generated='' } = d;\nconst maxFlow = Math.max(...sectors.map(function(s){ return Math.abs(s.net); }), 1);\n\n// Build sector bars HTML without nested template literals\nconst sectorBarsHtml = sectors.map(function(s) {\n  const pct = Math.max(2, Math.round((Math.abs(s.net) / maxFlow) * 100));\n  const pos  = s.net >= 0;\n  const drvr = s.drivers.map(function(d) {\n    return d.stock.split(' ')[0] + '(' + (d.chg > 0 ? '+' : '') + d.chg + '%)';\n  }).join(' · ');\n  const barClass = pos ? 'sp' : 'sn';\n  const valColor = pos ? '#10b981' : '#ef4444';\n  const sign     = pos ? '+' : '';\n  return '<div class=\"srow\">'\n    + '<span class=\"sname\">' + s.sector + '</span>'\n    + '<div class=\"sbwrap\"><div class=\"sbar ' + barClass + '\" style=\"width:' + pct + '%\">' + sign + s.net + '%</div></div>'\n    + '<span class=\"sval\" style=\"color:' + valColor + '\">' + sign + s.net + '%</span>'\n    + '</div>'\n    + (drvr ? '<div class=\"sdrvr\">↳ ' + drvr + '</div>' : '');\n}).join('');\n\n// Build signal cards without nested template literals\nconst signalCardsHtml = newEntries.length\n  ? newEntries.map(function(s) {\n      const hi = s.amcs.length >= 3;\n      const bdgClass = hi ? 'bh' : 'bm';\n      const bdgLabel = (hi ? '🔴 HIGH' : '🟡 MEDIUM') + ' · ' + s.amcs.length + ' AMCs';\n      const amcNames = s.amcs.map(function(a){ return a.fund; }).join(' · ');\n      return '<div class=\"sc\">'\n        + '<div class=\"sn2\">' + s.stock + '</div>'\n        + '<span class=\"bdg ' + bdgClass + '\">' + bdgLabel + '</span>'\n        + '<div class=\"amc\">' + amcNames + '</div>'\n        + '<div class=\"wt\">Max: ' + s.max_wt.toFixed(2) + '% · Hold 60d</div>'\n        + '</div>';\n    }).join('')\n  : '<p style=\"color:#475569;font-size:12px\">No cross-AMC new entries this month.</p>';\n\n// Chart data as JSON strings (safe to embed)\nconst convJson    = JSON.stringify(conviction);\nconst basketJson  = JSON.stringify(basket);\nconst sectorsJson = JSON.stringify(sectors);\nconst newJson     = JSON.stringify(newEntries);\nconst fundsHtml   = funds.map(function(f){ return '<span class=\"tag\">' + f + '</span>'; }).join('');\n\nconst html = '<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><title>MF Alpha Dashboard</title>'\n  + '<script src=\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\"><\\/script>'\n  + '<style>'\n  + '*{margin:0;padding:0;box-sizing:border-box}body{font-family:Segoe UI,sans-serif;background:#0f172a;color:#e2e8f0}'\n  + '.hdr{background:linear-gradient(135deg,#1e3a5f,#0f172a);padding:20px 28px;border-bottom:1px solid #1e293b}'\n  + '.hdr h1{font-size:22px;font-weight:700;color:#38bdf8}.hdr p{font-size:12px;color:#64748b;margin-top:3px}'\n  + '.tags{display:flex;gap:8px;margin-top:10px}.tag{background:#1e293b;border:1px solid #334155;border-radius:5px;padding:3px 10px;font-size:11px;color:#94a3b8}'\n  + '.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px 28px}'\n  + '.card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px}.full{grid-column:1/-1}'\n  + '.card h2{font-size:13px;font-weight:600;color:#38bdf8;margin-bottom:2px}.sub{font-size:10px;color:#64748b;margin-bottom:12px}'\n  + 'canvas{max-height:260px}'\n  + '.srow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #0f172a}'\n  + '.sname{width:160px;font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'\n  + '.sbwrap{flex:1;height:14px;background:#0f172a;border-radius:3px;overflow:hidden}'\n  + '.sbar{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:4px;font-size:9px;font-weight:700}'\n  + '.sp{background:linear-gradient(90deg,#059669,#10b981);color:#d1fae5}.sn{background:linear-gradient(90deg,#dc2626,#ef4444);color:#fee2e2}'\n  + '.sval{width:55px;text-align:right;font-size:11px;font-weight:600}'\n  + '.sdrvr{font-size:9px;color:#475569;padding:1px 0 5px 168px}'\n  + '.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-top:8px}'\n  + '.sc{background:#0f172a;border:1px solid #334155;border-radius:7px;padding:10px}'\n  + '.sc .sn2{font-size:11px;font-weight:600;color:#f1f5f9;margin-bottom:5px}'\n  + '.bdg{display:inline-block;font-size:9px;padding:2px 7px;border-radius:999px;margin-bottom:3px}'\n  + '.bh{background:#7f1d1d;color:#fca5a5}.bm{background:#78350f;color:#fcd34d}'\n  + '.sc .amc{font-size:9px;color:#64748b}.sc .wt{font-size:10px;color:#10b981;margin-top:3px}'\n  + '.ftr{padding:12px 28px;font-size:10px;color:#475569;text-align:center;border-top:1px solid #1e293b}'\n  + '</style></head><body>'\n  + '<div class=\"hdr\"><h1>&#127974; MF Intelligence Layer &#8212; Alpha Signal Dashboard</h1>'\n  + '<p>Live institutional intelligence from Indian mutual fund portfolio disclosures</p>'\n  + '<div class=\"tags\">' + fundsHtml + '</div></div>'\n  + '<div class=\"grid\">'\n  + '<div class=\"card\"><h2>&#127919; Strategy 1 &#8212; Conviction Clustering</h2><p class=\"sub\">Stocks held &#8805;2% by 2+ AMCs | Score = avg_weight x AMC_count</p><canvas id=\"c1\"></canvas></div>'\n  + '<div class=\"card\"><h2>&#128200; Strategy 2 &#8212; Institutional Alpha Basket</h2><p class=\"sub\">Top 10 by cross-fund consensus | 5% equal-weight | Rebalance 15th monthly</p><canvas id=\"c2\"></canvas></div>'\n  + '<div class=\"card full\"><h2>&#127754; Strategy 3 &#8212; Sector Rotation Heatmap</h2><p class=\"sub\">Net MF allocation shift by sector | Green = inflow &#183; Red = outflow</p><div id=\"sbars\">' + sectorBarsHtml + '</div></div>'\n  + '<div class=\"card full\"><h2>&#128640; Strategy 4 &#8212; New Top-10 Momentum</h2><p class=\"sub\">Stocks newly added to 2+ AMC top holdings | 60-day hold | Apply liquidity filter</p><div class=\"sgrid\" id=\"scards\">' + signalCardsHtml + '</div></div>'\n  + '</div>'\n  + '<div class=\"ftr\">Generated: ' + generated + ' &nbsp;|&nbsp; Disclaimer: Educational only. Not investment advice.</div>'\n  + '<script>'\n  + 'Chart.defaults.color=\"#94a3b8\";Chart.defaults.borderColor=\"#1e293b\";'\n  + 'var conviction=' + convJson + ';'\n  + 'var basket=' + basketJson + ';'\n  + 'var sectors=' + sectorsJson + ';'\n  + 'var newEntries=' + newJson + ';'\n  + 'new Chart(document.getElementById(\"c1\"),{type:\"bar\",data:{labels:conviction.map(function(s){return s.stock.split(\" \").slice(0,2).join(\" \");}),datasets:[{label:\"Conviction Score\",data:conviction.map(function(s){return s.conviction_score;}),backgroundColor:conviction.map(function(s){return s.amc_count>=3?\"rgba(56,189,248,0.9)\":\"rgba(56,189,248,0.5)\";}),borderRadius:3},{label:\"Confidence/10\",data:conviction.map(function(s){return s.confidence/10;}),backgroundColor:\"rgba(16,185,129,0.4)\",borderRadius:3}]},options:{indexAxis:\"y\",responsive:true,plugins:{legend:{position:\"top\",labels:{font:{size:10},boxWidth:10}}},scales:{x:{grid:{color:\"#1e293b\"}},y:{grid:{color:\"#1e293b\"},ticks:{font:{size:10}}}}}});'\n  + 'new Chart(document.getElementById(\"c2\"),{type:\"doughnut\",data:{labels:basket.map(function(s){return s.stock.split(\" \").slice(0,2).join(\" \");}),datasets:[{data:basket.map(function(){return 5;}),backgroundColor:[\"#0ea5e9\",\"#38bdf8\",\"#7dd3fc\",\"#0284c7\",\"#0369a1\",\"#06b6d4\",\"#22d3ee\",\"#67e8f9\",\"#a5f3fc\",\"#cffafe\"],borderColor:\"#0f172a\",borderWidth:2}]},options:{responsive:true,plugins:{legend:{position:\"right\",labels:{font:{size:9},boxWidth:10}}},cutout:\"60%\"}});'\n  + '<\\/script></body></html>';\n\nreturn [{ json: { html } }];"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond with Dashboard",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Dashboard Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Large Cap Funds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Large Cap Funds": {
+      "main": [
+        [
+          {
+            "node": "Fetch Flexi Cap Funds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Flexi Cap Funds": {
+      "main": [
+        [
+          {
+            "node": "Fetch Mid Cap Funds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Mid Cap Funds": {
+      "main": [
+        [
+          {
+            "node": "Extract Fund IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Fund IDs": {
+      "main": [
+        [
+          {
+            "node": "Holdings: Large Cap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Holdings: Large Cap": {
+      "main": [
+        [
+          {
+            "node": "Holdings: Flexi Cap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Holdings: Flexi Cap": {
+      "main": [
+        [
+          {
+            "node": "Holdings: Mid Cap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Holdings: Mid Cap": {
+      "main": [
+        [
+          {
+            "node": "Compute All Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute All Signals": {
+      "main": [
+        [
+          {
+            "node": "Generate Dashboard HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dashboard HTML": {
+      "main": [
+        [
+          {
+            "node": "Respond with Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

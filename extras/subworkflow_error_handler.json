@@ -1,0 +1,47 @@
+{
+  "name": "Subworkflow - Error Handler",
+  "nodes": [
+    {
+      "id": "error-trigger-node",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "format-error-node",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst errorData = items[0]?.json || {};\n\nconst output = {\n  success: false,\n  error: {\n    message: errorData.execution?.error?.message || \"Unknown error occurred\",\n    node: errorData.execution?.error?.node?.name || \"Unknown node\",\n    workflow_name: errorData.workflow?.name || \"Unknown workflow\",\n    workflow_id: errorData.workflow?.id || \"Unknown ID\",\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [{ json: output }];"
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

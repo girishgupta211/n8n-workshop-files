@@ -1,0 +1,615 @@
+{
+  "name": "Main Orchestrator",
+  "nodes": [
+    {
+      "id": "orch-webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        100,
+        200
+      ],
+      "parameters": {
+        "path": "financial-analyst",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "orch-validate-query",
+      "name": "Validate Query Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst body = items[0]?.json?.body || items[0]?.json || {};\nconst query = body.query || \"\";\n\nlet isValid = true;\nlet errorReason = \"\";\n\nif (typeof query !== 'string') {\n  isValid = false;\n  errorReason = \"Query must be a string.\";\n} else {\n  const trimmed = query.trim();\n  if (trimmed.length < 3 || trimmed.length > 100) {\n    isValid = false;\n    errorReason = \"Query length must be between 3 and 100 characters.\";\n  } else {\n    if (/<script|javascript:|select\\s+.*\\s+from/i.test(trimmed)) {\n      isValid = false;\n      errorReason = \"Query contains restricted special characters or patterns.\";\n    }\n  }\n}\n\nreturn [{\n  json: {\n    query: query,\n    isValid: isValid,\n    error: errorReason\n  }\n}];"
+      }
+    },
+    {
+      "id": "orch-if-query-valid",
+      "name": "If Query Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        400,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-query-valid",
+              "leftValue": "={{ $json.isValid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orch-fetch-data-layer",
+      "name": "Fetch Fund Data",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        550,
+        200
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "subworkflow_data_layer_id",
+          "cachedResultName": "Subworkflow - Data Layer"
+        },
+        "mode": "once"
+      }
+    },
+    {
+      "id": "orch-if-enriched",
+      "name": "If Enriched",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        750,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-enriched-true",
+              "leftValue": "={{ $json.enriched }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orch-fetch-category",
+      "name": "Fetch Category Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        950,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme?page=1&limit=1&q={{ encodeURIComponent($node[\"Fetch Fund Data\"].json.name) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": false,
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "mfapisXApiKey"
+        }
+      }
+    },
+    {
+      "id": "orch-payload-builder",
+      "name": "Determine Routing & Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst fundData = $('Fetch Fund Data').first().json;\nconst webhookInput = $('Webhook').first().json.body || {};\n\nlet category = \"General\";\nif (fundData.enriched) {\n  const searchResult = $('Fetch Category Info').first().json.body?.data?.list || [];\n  if (searchResult.length > 0) {\n    category = searchResult[0].category || searchResult[0].sebi_category_name || \"General\";\n  }\n}\n\nlet isValid = true;\nlet errorReason = \"\";\n\n// AUM checks — only enforce when enriched data is available\nif (fundData.enriched) {\n  const aum = parseFloat(fundData.aum);\n  if (isNaN(aum) || aum <= 0) {\n    isValid = false;\n    errorReason = `Invalid Net Assets (AUM): AUM must be greater than 0 (got ${fundData.aum}).`;\n  }\n}\n\n// Holdings checks — only enforce when enriched data is available\n// Data layer outputs holdings with field name 'weight' (not 'weight_percent' or 'Portfolio_Weight')\nconst holdings = fundData.holdings || [];\nif (isValid && fundData.enriched) {\n  let totalWeight = 0;\n  for (const h of holdings) {\n    const weight = parseFloat(h.weight || h.weight_percent || h.Portfolio_Weight) || 0;\n    totalWeight += weight;\n  }\n  if (totalWeight <= 0 || totalWeight > 100) {\n    isValid = false;\n    errorReason = `Holdings weight checks failed: Sum of weights must be > 0% and <= 100% (got ${totalWeight}%).`;\n  }\n}\n\n// NAV History checks\nconst navHistory = fundData.nav_history || [];\nif (isValid && navHistory.length < 20) {\n  isValid = false;\n  errorReason = `NAV history length check failed: Must contain at least 20 historical date records (got ${navHistory.length}).`;\n}\n\n// Required fields verification\nif (isValid) {\n  if (!fundData.name || !fundData.scheme_code) {\n    isValid = false;\n    errorReason = \"Required schema fields 'name' or 'scheme_code' are missing from fund details.\";\n  }\n}\n\nconst output = {\n  query: webhookInput.query || \"\",\n  scheme_id: fundData.scheme_code,\n  scheme_name: fundData.name,\n  isin: fundData.isin || fundData.scheme_isin || \"\",\n  amc_name: fundData.amc_name || \"\",\n  category: category,\n  enriched: fundData.enriched,\n  aum: fundData.aum,\n  expense_ratio: fundData.expense_ratio,\n  isValid: isValid,\n  error: errorReason,\n  data: {\n    nav_history: navHistory,\n    holdings: holdings,\n    risk_metrics: fundData.risk_metrics || {}\n  }\n};\n\nreturn [{ json: output }];"
+      }
+    },
+    {
+      "id": "orch-if-data-valid",
+      "name": "If Data Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1350,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond-data-valid",
+              "leftValue": "={{ $json.isValid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orch-error-formatter",
+      "name": "Format Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst errorReason = items[0]?.json?.error || \"Unknown validation error\";\n\nreturn [{\n  json: {\n    success: false,\n    error: errorReason\n  }\n}];"
+      }
+    },
+    {
+      "id": "orch-agent-node",
+      "name": "Financial Orchestrator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1550,
+        200
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.query }}",
+        "options": {
+          "systemMessage": "=You are the central Financial Orchestrator Agent. Your role is to coordinate analysis queries for mutual funds.\n\n### Context Data:\nScheme Name: {{ $json.scheme_name }}\nISIN: {{ $json.isin }}\nAMC: {{ $json.amc_name }}\nCategory: {{ $json.category }}\nEnriched: {{ $json.enriched }}\nAUM: ₹{{ $json.aum }} Crores\nExpense Ratio: {{ $json.expense_ratio }}%\nHoldings: {{ JSON.stringify($json.data.holdings) }}\nRisk Metrics: Sharpe: {{ $json.data.risk_metrics?.sharpe }}, Beta: {{ $json.data.risk_metrics?.beta }}, StdDev: {{ $json.data.risk_metrics?.std_dev }}\n\n### Routing Logic Rules:\n- Inspect the 'Category' field:\n  1. If it contains 'Mid Cap', you MUST call the tool 'analyze_midcap_fund'. Pass the complete fund data schema to it.\n  2. If it contains 'PSU' or thematic public sector tags, you MUST call the tool 'analyze_psu_fund'. Pass the complete fund data schema to it.\n  3. If it contains neither, or if 'Enriched' is false, DO NOT call these tools. Perform standard general mutual fund evaluation internally based on the available metrics (AUM, Expense Ratio, NAV trends, and risk metrics if present).\n\n### Output Report synthesis:\n1. If a specialized analyst tool was called, take their markdown report and synthesize it as the core analysis. Start with a header indicating the routing choice (e.g. \"Delegated to Midcap Analyst\").\n2. If evaluated internally, perform standard general fund review (structure, cost efficiency, performance overview) and mark it as \"Internal Standard Review\".\n3. Combine findings into a premium, professional report. Highlight key metrics in bold or list format.",
+          "maxIterations": 25
+        }
+      }
+    },
+    {
+      "id": "orch-format-final-report",
+      "name": "Format Final Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst fundData = $('Determine Routing & Payload').first().json || {};\nconst agentData = $('Financial Orchestrator Agent').first().json || {};\nconst webhookInput = $('Webhook').first().json.body || {};\n\nconst sanitize = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst truncate = (value, max = 1200) => {\n  const text = String(value ?? '').trim();\n  if (!text) {\n    return '';\n  }\n  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;\n};\nconst compactText = (value) => String(value ?? '').replace(/\\s+/g, ' ').trim();\nconst toNumber = (value) => {\n  if (value === null || value === undefined || value === '') {\n    return null;\n  }\n  const cleaned = String(value).replace(/[^0-9.+-]/g, '');\n  if (!cleaned) {\n    return null;\n  }\n  const parsed = Number(cleaned);\n  return Number.isFinite(parsed) ? parsed : null;\n};\nconst toPercent = (value) => {\n  const numeric = toNumber(value);\n  if (numeric === null) {\n    return 'N/A';\n  }\n  const adjusted = Math.abs(numeric) <= 1 ? numeric * 100 : numeric;\n  return `${adjusted.toFixed(2)}%`;\n};\nconst toDecimal = (value, digits = 2) => {\n  const numeric = toNumber(value);\n  return numeric === null ? 'N/A' : numeric.toFixed(digits);\n};\nconst labelLookup = (text, labels) => {\n  const lines = String(text ?? '').split(/\\r?\\n/);\n  for (const rawLine of lines) {\n    const line = rawLine.replace(/^[\\s>*-]+/, '').trim();\n    const lowered = line.toLowerCase();\n    if (labels.some((label) => lowered.includes(label))) {\n      const parts = line.split(':');\n      return parts.length > 1 ? parts.slice(1).join(':').trim() : line;\n    }\n  }\n  return null;\n};\n\nconst agentOutput = String(agentData.output ?? agentData.text ?? agentData.response ?? agentData.result ?? '').trim();\nconst fundName = sanitize(fundData.scheme_name || fundData.name || 'Unknown Fund');\nconst isin = sanitize(fundData.isin || 'N/A');\nconst amcName = sanitize(fundData.amc_name || 'N/A');\nconst category = sanitize(fundData.category || 'General');\nconst aum = toDecimal(fundData.aum, 2);\nconst expenseRatio = toPercent(fundData.expense_ratio);\nconst riskMetrics = fundData.data?.risk_metrics || {};\nconst holdings = Array.isArray(fundData.data?.holdings) ? fundData.data.holdings : [];\nconst topHoldings = holdings.slice(0, 5).map((holding, index) => {\n  const name = sanitize(holding.security || holding.name || `Holding ${index + 1}`);\n  const weight = toPercent(holding.weight);\n  return `${index + 1}. ${name} (${weight})`;\n});\nconst topHoldingsMarkdown = topHoldings.length > 0 ? topHoldings.map((line) => `- ${line}`).join('\\n') : '- None available from the current data layer.';\nconst topHoldingsSlack = topHoldings.length > 0 ? topHoldings.map((line) => `• ${line}`).join('\\n') : '• None available from the current data layer.';\nconst navHistory = Array.isArray(fundData.data?.nav_history) ? fundData.data.nav_history : [];\nconst navWindow = navHistory.length >= 2 ? `${sanitize(navHistory[0]?.date || 'N/A')} → ${sanitize(navHistory[navHistory.length - 1]?.date || 'N/A')}` : 'N/A';\nconst cagr1y = toPercent(labelLookup(agentOutput, ['1-year cagr', '1y cagr', 'cagr 1y']) || labelLookup(agentOutput, ['1 year cagr']) || riskMetrics.cagr_1y);\nconst cagr3y = toPercent(labelLookup(agentOutput, ['3-year cagr', '3y cagr', 'cagr 3y']) || labelLookup(agentOutput, ['3 year cagr']) || riskMetrics.cagr_3y);\nconst cagr5y = toPercent(labelLookup(agentOutput, ['5-year cagr', '5y cagr', 'cagr 5y']) || labelLookup(agentOutput, ['5 year cagr']) || riskMetrics.cagr_5y);\nconst stdDev = toPercent(riskMetrics.std_dev ?? labelLookup(agentOutput, ['standard deviation', 'std dev', 'volatility']));\nconst sharpe = toDecimal(riskMetrics.sharpe ?? labelLookup(agentOutput, ['sharpe ratio', 'sharpe']), 2);\nconst beta = toDecimal(riskMetrics.beta ?? labelLookup(agentOutput, ['beta']), 2);\nconst maxDrawdown = toPercent(labelLookup(agentOutput, ['max drawdown', 'drawdown']));\nconst executiveSummary = sanitize(compactText(agentOutput || 'No executive summary was produced.'));\nconst riskStdDevNumeric = toNumber(riskMetrics.std_dev ?? labelLookup(agentOutput, ['standard deviation', 'std dev', 'volatility']));\nconst riskFlags = [];\nif (riskStdDevNumeric !== null && ((Math.abs(riskStdDevNumeric) <= 1 && Math.abs(riskStdDevNumeric) * 100 >= 22) || Math.abs(riskStdDevNumeric) > 1 && Math.abs(riskStdDevNumeric) >= 22)) {\n  riskFlags.push('High volatility');\n}\nconst sharpeNumeric = toNumber(riskMetrics.sharpe ?? labelLookup(agentOutput, ['sharpe ratio', 'sharpe']));\nif (sharpeNumeric !== null && sharpeNumeric < 0.5) {\n  riskFlags.push('Weak risk-adjusted returns');\n}\nif (navHistory.length < 20) {\n  riskFlags.push('Limited NAV history for deeper analysis');\n}\nconst riskFlagText = riskFlags.length > 0 ? riskFlags.join(', ') : 'No active risk flags';\nconst hitlStatus = riskFlags.includes('High volatility') ? 'APPROVED' : 'DIRECT_ACTION';\nconst analystRecommendation = sanitize(truncate(executiveSummary || 'No recommendation was produced.', 1800));\nconst reportMarkdown = `# Mutual Fund Investment Report: ${fundName}\n## Executive Summary\n${executiveSummary}\n\n## Fund Profile\n- **ISIN**: ${isin} | **AMC**: ${amcName}\n- **Category**: ${category} | **Total AUM**: ${aum} Lakhs\n- **Expense Ratio**: ${expenseRatio}\n\n## Performance Metrics\n- **1-Year CAGR**: ${cagr1y}\n- **3-Year CAGR**: ${cagr3y}\n- **5-Year CAGR**: ${cagr5y}\n\n## Risk & Volatility Analysis\n- **Standard Deviation**: ${stdDev}\n- **Sharpe Ratio**: ${sharpe}\n- **Beta**: ${beta}\n- **Max Drawdown**: ${maxDrawdown}\n\n## Portfolio Holdings Concentration\n- **Top 5 Holdings**:\n${topHoldingsMarkdown}\n- **Major Sector Exposure**: N/A from current payload\n\n## Analyst Recommendation\n- **Thesis**: ${analystRecommendation}\n- **HITL Status**: ${hitlStatus}`;\nconst requiredHeaders = ['# Mutual Fund Investment Report:', '## Executive Summary', '## Fund Profile', '## Performance Metrics', '## Risk & Volatility Analysis', '## Portfolio Holdings Concentration', '## Analyst Recommendation'];\nconst hasRequiredHeaders = requiredHeaders.every((header) => reportMarkdown.includes(header));\nconst reportComplete = Boolean(reportMarkdown.trim()) && hasRequiredHeaders;\nconst fallbackMarkdown = `# Mutual Fund Investment Report: Data Unavailable\n## Executive Summary\nA safe fallback was generated because the phase 8 formatter did not receive a complete report payload.\n\n## Fund Profile\n- **ISIN**: ${isin}\n- **AMC**: ${amcName}\n- **Category**: ${category}\n\n## Performance Metrics\n- **1-Year CAGR**: N/A\n- **3-Year CAGR**: N/A\n- **5-Year CAGR**: N/A\n\n## Risk & Volatility Analysis\n- **Standard Deviation**: N/A\n- **Sharpe Ratio**: N/A\n- **Beta**: N/A\n- **Max Drawdown**: N/A\n\n## Portfolio Holdings Concentration\n- **Top 5 Holdings**: N/A\n- **Major Sector Exposure**: N/A\n\n## Analyst Recommendation\n- **Thesis**: Fallback report generated due to missing or malformed source output.\n- **HITL Status**: DIRECT_ACTION`;\nconst finalMarkdown = reportComplete ? reportMarkdown : fallbackMarkdown;\nconst slackFallbackText = `${fundName} | ISIN ${isin} | 3Y CAGR ${cagr3y} | Sharpe ${sharpe} | Risk ${riskFlagText}`;\nconst slackBlocks = [\n  {\n    type: 'header',\n    text: {\n      type: 'plain_text',\n      text: `Mutual Fund Report: ${truncate(fundName, 40)}`,\n      emoji: true\n    }\n  },\n  {\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: `*ISIN:* ${isin}\\n*AMC:* ${amcName}\\n*Category:* ${category}\\n*AUM:* ${aum} Lakhs\\n*Expense Ratio:* ${expenseRatio}`\n    }\n  },\n  {\n    type: 'section',\n    fields: [\n      { type: 'mrkdwn', text: `*1Y CAGR*\\n${cagr1y}` },\n      { type: 'mrkdwn', text: `*3Y CAGR*\\n${cagr3y}` },\n      { type: 'mrkdwn', text: `*5Y CAGR*\\n${cagr5y}` },\n      { type: 'mrkdwn', text: `*Sharpe*\\n${sharpe}` },\n      { type: 'mrkdwn', text: `*Std Dev*\\n${stdDev}` },\n      { type: 'mrkdwn', text: `*Beta*\\n${beta}` }\n    ]\n  },\n  {\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: `*Executive Summary*\\n${truncate(executiveSummary, 1200) || 'No executive summary was produced.'}`\n    }\n  },\n  {\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: `*Top Holdings*\\n${topHoldingsSlack}`\n    }\n  },\n  {\n    type: 'context',\n    elements: [\n      {\n        type: 'mrkdwn',\n        text: `*Risk Flags:* ${sanitize(riskFlagText)} | *NAV Window:* ${navWindow}`\n      }\n    ]\n  }\n];\n\nreturn [{\n  json: {\n    ...fundData,\n    query: webhookInput.query || '',\n    scheme_id: fundData.scheme_code,\n    scheme_name: fundData.scheme_name || fundData.name,\n    isin,\n    amc_name: amcName,\n    category,\n    enriched: fundData.enriched,\n    aum: fundData.aum,\n    expense_ratio: fundData.expense_ratio,\n    isValid: true,\n    error: '',\n    data: {\n      nav_history: navHistory,\n      holdings,\n      risk_metrics: riskMetrics\n    },\n    reportMarkdown: finalMarkdown,\n    emailSubject: `Mutual Fund Investment Report: ${fundName}`,\n    slackFallbackText,\n    slackBlocks: JSON.stringify(slackBlocks),\n    deliveryMeta: {\n      hasRequiredHeaders,\n      reportComplete,\n      riskFlags,\n      hitlStatus,\n      usedFallback: !reportComplete\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "orch-render-email-html",
+      "name": "Render Email HTML",
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        1950,
+        350
+      ],
+      "parameters": {
+        "mode": "markdownToHtml",
+        "markdown": "={{ $json.reportMarkdown }}",
+        "destinationKey": "emailHtml",
+        "options": {}
+      }
+    },
+    {
+      "id": "orch-send-slack-report",
+      "name": "Send Slack Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1950,
+        80
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $env.FINANCIAL_ANALYST_SLACK_CHANNEL_ID }}",
+          "cachedResultName": "Financial Analyst Reports"
+        },
+        "messageType": "block",
+        "text": "={{ $json.slackFallbackText }}",
+        "blocksUi": "={{ $json.slackBlocks }}"
+      }
+    },
+    {
+      "id": "orch-send-email-report",
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2150,
+        350
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{ $env.FINANCIAL_ANALYST_FROM_EMAIL }}",
+        "toEmail": "={{ $env.FINANCIAL_ANALYST_REPORT_TO_EMAIL }}",
+        "subject": "={{ $json.emailSubject }}",
+        "html": "={{ $json.emailHtml }}"
+      }
+    },
+    {
+      "id": "orch-openai-model-node",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1400,
+        420
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "abacusai/dracarys-llama-3.1-70B-instruct"
+        },
+        "responsesApiEnabled": false,
+        "options": {
+          "temperature": 0,
+          "baseURL": "https://integrate.api.nvidia.com/v1"
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "9HEWVGUOT0gEvWvr",
+          "name": "nvidiaApi"
+        }
+      }
+    },
+    {
+      "id": "orch-memory-node",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        1540,
+        420
+      ],
+      "parameters": {
+        "contextWindowLength": 50,
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.scheme_id || 'orchestrator-session' }}"
+      }
+    },
+    {
+      "id": "orch-tool-midcap",
+      "name": "Workflow - Midcap Analyst",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1680,
+        420
+      ],
+      "parameters": {
+        "name": "analyze_midcap_fund",
+        "description": "Pass the mutual fund data schema here to generate specialized midcap growth/PSU risk reviews.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "midcap_analyst_workflow_id",
+          "cachedResultName": "Subworkflow - Midcap Analyst"
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"scheme_id\": \"string\",\n  \"scheme_name\": \"string\",\n  \"category\": \"string\",\n  \"aum\": 0,\n  \"expense_ratio\": 0,\n  \"isin\": \"string\",\n  \"amc_name\": \"string\",\n  \"data\": {\n    \"nav_history\": [],\n    \"holdings\": [],\n    \"risk_metrics\": {}\n  }\n}"
+      }
+    },
+    {
+      "id": "orch-tool-psu",
+      "name": "Workflow - PSU Analyst",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1820,
+        420
+      ],
+      "parameters": {
+        "name": "analyze_psu_fund",
+        "description": "Pass the mutual fund data schema here to generate specialized midcap growth/PSU risk reviews.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "psu_analyst_workflow_id",
+          "cachedResultName": "Subworkflow - PSU Analyst"
+        },
+        "specifyInputSchema": true,
+        "jsonSchemaExample": "{\n  \"scheme_id\": \"string\",\n  \"scheme_name\": \"string\",\n  \"category\": \"string\",\n  \"aum\": 0,\n  \"expense_ratio\": 0,\n  \"isin\": \"string\",\n  \"amc_name\": \"string\",\n  \"data\": {\n    \"nav_history\": [],\n    \"holdings\": [],\n    \"risk_metrics\": {}\n  }\n}"
+      }
+    },
+    {
+      "id": "orch-respond-node",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1950,
+        200
+      ],
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Query Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Query Input": {
+      "main": [
+        [
+          {
+            "node": "If Query Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Query Valid": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fund Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fund Data": {
+      "main": [
+        [
+          {
+            "node": "If Enriched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Enriched": {
+      "main": [
+        [
+          {
+            "node": "Fetch Category Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Determine Routing & Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Category Info": {
+      "main": [
+        [
+          {
+            "node": "Determine Routing & Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Routing & Payload": {
+      "main": [
+        [
+          {
+            "node": "If Data Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Data Valid": {
+      "main": [
+        [
+          {
+            "node": "Financial Orchestrator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Financial Orchestrator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Financial Orchestrator Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow - Midcap Analyst": {
+      "ai_tool": [
+        [
+          {
+            "node": "Financial Orchestrator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow - PSU Analyst": {
+      "ai_tool": [
+        [
+          {
+            "node": "Financial Orchestrator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Orchestrator Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Final Report": {
+      "main": [
+        [
+          {
+            "node": "Render Email HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Email HTML": {
+      "main": [
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
