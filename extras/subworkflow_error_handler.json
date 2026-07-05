@@ -2,31 +2,31 @@
   "name": "Subworkflow - Error Handler",
   "nodes": [
     {
-      "id": "error-trigger-node",
+      "parameters": {},
+      "id": "f802ceba-f6b4-4882-8e2a-7228dcea95a7",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        200,
-        200
-      ],
-      "parameters": {}
+        0,
+        0
+      ]
     },
     {
-      "id": "format-error-node",
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst errorData = items[0]?.json || {};\n\nconst output = {\n  success: false,\n  error: {\n    message: errorData.execution?.error?.message || \"Unknown error occurred\",\n    node: errorData.execution?.error?.node?.name || \"Unknown node\",\n    workflow_name: errorData.workflow?.name || \"Unknown workflow\",\n    workflow_id: errorData.workflow?.id || \"Unknown ID\",\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "038f8a8b-c0c3-4db9-96f3-79746c6ddfa3",
       "name": "Format Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        500,
-        200
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "const items = $input.all();\nconst errorData = items[0]?.json || {};\n\nconst output = {\n  success: false,\n  error: {\n    message: errorData.execution?.error?.message || \"Unknown error occurred\",\n    node: errorData.execution?.error?.node?.name || \"Unknown node\",\n    workflow_name: errorData.workflow?.name || \"Unknown workflow\",\n    workflow_id: errorData.workflow?.id || \"Unknown ID\",\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [{ json: output }];"
-      }
+        304,
+        0
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Error Trigger": {
       "main": [
@@ -40,8 +40,17 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "efc9c7f6-d63b-41c9-a5f6-c83a72e96d81",
+  "meta": {
+    "instanceId": "727532e30984c5e2bf6dd57cbce46198766a1969174f8ec5cee6b37f07aed994"
+  },
+  "nodeGroups": [],
+  "id": "V9VilKSmk8vDYEMc",
+  "tags": []
 }

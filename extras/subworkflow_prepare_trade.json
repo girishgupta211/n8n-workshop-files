@@ -2,20 +2,11 @@
   "name": "Subworkflow - Prepare Trade",
   "nodes": [
     {
-      "id": "prep-webhook-trigger",
-      "name": "When Executed by Another Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        100,
-        200
-      ],
       "parameters": {
         "workflowInputs": {
           "values": [
             {
-              "name": "scheme_name",
-              "type": "string"
+              "name": "scheme_name"
             },
             {
               "name": "reallocation_pct",
@@ -27,24 +18,24 @@
             }
           ]
         }
-      }
+      },
+      "id": "6636209e-7c8d-4b5b-bda2-059b428146c7",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1008,
+        160
+      ]
     },
     {
-      "id": "prep-if-escalate",
-      "name": "If High Risk (Escalate)",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        300,
-        200
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "or",
           "conditions": [
@@ -67,70 +58,80 @@
               }
             }
           ]
-        }
-      }
-    },
-    {
-      "id": "prep-auto-approve-response",
-      "name": "Auto-Approved Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+        },
+        "options": {}
+      },
+      "id": "1fc1c39c-63f2-4ff0-b424-2e6aa26c9336",
+      "name": "If High Risk (Escalate)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
       "position": [
-        500,
-        350
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "return [{ json: { status: \"approved\", reason: \"Below risk thresholds (reallocation <= 10% and StdDev <= 22%)\" } }];"
-      }
+        -800,
+        160
+      ]
     },
     {
-      "id": "prep-send-email",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"approved\",\n  \"reason\": \"Below risk thresholds (reallocation <= 10% and StdDev <= 22%)\"\n}",
+        "options": {}
+      },
+      "id": "5dbb47bc-9d7f-4da1-9b6e-c0a74826b39b",
+      "name": "Auto-Approved Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -608,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $vars.Sender_Email }}",
+        "toEmail": "={{ $vars.Receiver_Email }}",
+        "subject": "[URGENT] Reallocation Approval Required",
+        "html": "=<h3>[URGENT] Mutual Fund Reallocation Approval Required</h3>\n<p>A high-risk mutual fund reallocation has been proposed by the AI Analyst pipeline and requires human sign-off.</p>\n<ul>\n  <li><strong>Fund Name:</strong> {{ $node[\"When Executed by Another Workflow\"].json.scheme_name }}</li>\n  <li><strong>Proposed Reallocation Weight:</strong> {{ $node[\"When Executed by Another Workflow\"].json.reallocation_pct }}%</li>\n  <li><strong>Fund Standard Deviation (Volatility):</strong> {{ $node[\"When Executed by Another Workflow\"].json.std_dev }}%</li>\n</ul>\n<p>Please review and choose an action below:</p>\n<a href=\"{{ $execution.resumeUrl }}?action=approve\" style=\"background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;\">Approve Reallocation</a>\n<a href=\"{{ $execution.resumeUrl }}?action=reject\" style=\"background-color: #f44336; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;\">Reject Reallocation</a>",
+        "options": {}
+      },
+      "id": "eccabd5c-d96d-4d3c-8f73-6f9f78c0914d",
       "name": "Send Approval Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
       "position": [
-        500,
-        100
+        -608,
+        64
       ],
-      "parameters": {
-        "fromEmail": "reviewer-alerts@company.com",
-        "toEmail": "analyst-lead@company.com",
-        "subject": "[URGENT] Reallocation Approval Required",
-        "emailFormat": "html",
-        "html": "=<h3>[URGENT] Mutual Fund Reallocation Approval Required</h3>\n<p>A high-risk mutual fund reallocation has been proposed by the AI Analyst pipeline and requires human sign-off.</p>\n<ul>\n  <li><strong>Fund Name:</strong> {{ $node[\"When Executed by Another Workflow\"].json.scheme_name }}</li>\n  <li><strong>Proposed Reallocation Weight:</strong> {{ $node[\"When Executed by Another Workflow\"].json.reallocation_pct }}%</li>\n  <li><strong>Fund Standard Deviation (Volatility):</strong> {{ $node[\"When Executed by Another Workflow\"].json.std_dev }}%</li>\n</ul>\n<p>Please review and choose an action below:</p>\n<a href=\"{{ $execution.resumeUrl }}?action=approve\" style=\"background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; margin-right: 10px; display: inline-block;\">Approve Reallocation</a>\n<a href=\"{{ $execution.resumeUrl }}?action=reject\" style=\"background-color: #f44336; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;\">Reject Reallocation</a>"
+      "webhookId": "c4c90c2b-a93e-418d-b003-7643fa481766",
+      "credentials": {
+        "smtp": {
+          "id": "GZfNqgN7fULWaNqr",
+          "name": "SMTP account"
+        }
       }
     },
     {
-      "id": "prep-wait-reviewer",
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "8b536c8a-c1dd-4522-8b30-40a910df56a2",
       "name": "Wait for Reviewer",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        700,
-        100
+        -400,
+        64
       ],
-      "parameters": {
-        "resume": "webhook",
-        "incomingAuthentication": "none"
-      }
+      "webhookId": "d8428ce5-b71a-4aed-9d2e-efa09a3bcc8d"
     },
     {
-      "id": "prep-if-approved",
-      "name": "If Approved",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        900,
-        100
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "and",
           "conditions": [
@@ -144,40 +145,50 @@
               "rightValue": "approve"
             }
           ]
-        }
-      }
+        },
+        "options": {}
+      },
+      "id": "f50bdea4-0f5e-439b-ac13-dbe440dc4ab2",
+      "name": "If Approved",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        64
+      ]
     },
     {
-      "id": "prep-approved-response",
-      "name": "Approved Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        1100,
-        50
-      ],
       "parameters": {
         "respondWith": "json",
         "responseBody": "={\n  \"status\": \"approved\",\n  \"reason\": \"Approved by human reviewer\"\n}",
         "options": {}
-      }
-    },
-    {
-      "id": "prep-rejected-response",
-      "name": "Rejected Response",
+      },
+      "id": "1eca77f0-a8a6-4de4-8dbe-a2145abfcfd1",
+      "name": "Approved Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        1100,
-        200
-      ],
+        0,
+        0
+      ]
+    },
+    {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={\n  \"status\": \"rejected\",\n  \"reason\": \"Rejected by human reviewer\"\n}",
         "options": {}
-      }
+      },
+      "id": "1844e654-1e4e-4bd3-8ff1-17d5278c995a",
+      "name": "Rejected Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        160
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
@@ -249,8 +260,21 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "V9VilKSmk8vDYEMc",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "0fb9bd0b-7908-4444-9a2e-4dfa9e1189fc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "727532e30984c5e2bf6dd57cbce46198766a1969174f8ec5cee6b37f07aed994"
+  },
+  "nodeGroups": [],
+  "id": "JCtAHp3ZKJotDViX",
+  "tags": []
 }

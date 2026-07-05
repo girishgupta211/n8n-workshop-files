@@ -2,75 +2,76 @@
   "name": "Subworkflow - Data Layer",
   "nodes": [
     {
-      "id": "webhook-trigger-node",
-      "name": "When Executed by Another Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        -1400,
-        200
-      ],
       "parameters": {
         "workflowInputs": {
           "values": [
             {
-              "name": "query",
-              "type": "string"
+              "name": "query"
             }
           ]
         }
-      }
+      },
+      "id": "61b03e3e-4203-46ca-96d1-ca678997c129",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1504,
+        128
+      ]
     },
     {
-      "id": "search-premium-node",
-      "name": "Search Premium Scheme",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        -1100,
-        200
-      ],
       "parameters": {
-        "method": "GET",
-        "url": "=https://app2.mfapis.club/api/v2/public/scheme?page=1&limit=1&q={{ encodeURIComponent($json.query) }}",
+        "jsCode": "const items = $input.all();\nconst raw = String(items[0].json.query || '').trim();\n\n// Strip leading filler / command words (analyze, show me, tell me about, etc.)\nlet cleaned = raw\n  .replace(/^(please\\s+)?(can you\\s+)?(analyze|analyse|show( me)?|tell me about|give me|get( me)?|fetch|find|lookup|look up|search( for)?|info( on)?|information( on| about)?|details( of| on| about)?|report( on)?|evaluate|review|about)\\s+/i, '');\n\n// Strip trailing plan/option qualifiers that make the premium search miss\n// e.g. \" - Direct Plan - Growth\", \"Regular Plan\", \"IDCW\", \"Growth Option\"\ncleaned = cleaned\n  .replace(/\\s*[-–—]\\s*(direct|regular)\\s*plan\\b/gi, '')\n  .replace(/\\s*[-–—]\\s*(growth|idcw|dividend|payout|reinvest(ment)?)\\b.*$/gi, '')\n  .replace(/\\b(direct|regular)\\s*plan\\b/gi, '')\n  .replace(/\\b(growth|idcw|dividend)\\s*(option|plan)?\\b/gi, '')\n  .replace(/\\bplan\\b/gi, '');\n\n// Collapse leftover separators and whitespace\ncleaned = cleaned\n  .replace(/[-–—]+/g, ' ')\n  .replace(/\\s{2,}/g, ' ')\n  .trim();\n\n// Fallback: if normalization stripped everything, use the original\nif (!cleaned) {\n  cleaned = raw;\n}\n\nreturn [{\n  json: {\n    query: raw,\n    original_query: raw,\n    search_query: cleaned\n  }\n}];"
+      },
+      "id": "e7c1a0d2-1b34-4c56-9a78-0d1e2f3a4b5c",
+      "name": "Normalize Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1392,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme?page=1&limit=1&q={{ encodeURIComponent($json.search_query) }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": false,
         "options": {
           "response": {
             "response": {
-              "neverError": true,
-              "fullResponse": true
+              "fullResponse": true,
+              "neverError": true
             }
           }
         }
       },
-      "onError": "continueRegularOutput",
+      "id": "008fdca6-ba67-4e72-a2ea-a5045f40812e",
+      "name": "Search Premium Scheme",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1280,
+        128
+      ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_CREDENTIAL_ID",
-          "name": "mfapisXApiKey"
+          "id": "2DGjGQsye39Z4hv1",
+          "name": "mfAPI"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
-      "id": "if-search-success-node",
-      "name": "If Premium Search Success",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -800,
-        200
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "strict",
+            "version": 3
           },
-          "combinator": "and",
           "conditions": [
             {
               "id": "conditions-search-success",
@@ -81,58 +82,58 @@
               },
               "rightValue": 0
             }
-          ]
-        }
-      }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "048cf14e-5ccb-4d64-8caa-a6bb2deacb98",
+      "name": "If Premium Search Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1056,
+        128
+      ]
     },
     {
-      "id": "fetch-detail-premium-node",
-      "name": "Fetch Scheme Detail (Premium)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        -500,
-        100
-      ],
       "parameters": {
-        "method": "GET",
         "url": "=https://app2.mfapis.club/api/v2/public/scheme/{{ $json.body.data?.list?.[0]?.id || $json.body.data?.[0]?.id || $json.body?.[0]?.id }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": false,
         "options": {
           "response": {
             "response": {
-              "neverError": true,
-              "fullResponse": true
+              "fullResponse": true,
+              "neverError": true
             }
           }
         }
       },
-      "onError": "continueRegularOutput",
+      "id": "242b39f2-228a-4532-9fb3-0cf3e519a497",
+      "name": "Fetch Scheme Detail (Premium)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -832,
+        48
+      ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_CREDENTIAL_ID",
-          "name": "mfapisXApiKey"
+          "id": "2DGjGQsye39Z4hv1",
+          "name": "mfAPI"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
-      "id": "if-detail-success-node",
-      "name": "If Premium Detail Success",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -200,
-        100
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "version": 2,
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 2
           },
           "combinator": "and",
           "conditions": [
@@ -146,151 +147,139 @@
               "rightValue": 200
             }
           ]
-        }
-      }
+        },
+        "options": {}
+      },
+      "id": "0201fe76-c465-4d4c-9db7-5414d9b4ccd0",
+      "name": "If Premium Detail Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -608,
+        48
+      ]
     },
     {
-      "id": "fetch-factsheet-premium-node",
+      "parameters": {
+        "url": "=https://app2.mfapis.club/api/v2/public/scheme/factsheet/{{ $json.body.data?.scheme_isin || $json.body.data?.isin || $json.body?.scheme_isin || $json.body?.isin }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "13672c8d-e59e-4ed7-97c8-553fec2c4dcd",
       "name": "Fetch Factsheet (Premium)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        100,
-        50
+        -384,
+        0
       ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2DGjGQsye39Z4hv1",
+          "name": "mfAPI"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
       "parameters": {
-        "method": "GET",
-        "url": "=https://app2.mfapis.club/api/v2/public/scheme/factsheet/{{ $json.body.data?.scheme_isin || $json.body.data?.isin || $json.body?.scheme_isin || $json.body?.isin }}",
+        "url": "=https://app2.mfapis.club/api/v2/public/nav/{{ $node[\"Fetch Scheme Detail (Premium)\"].json.body.data?.id || $node[\"Fetch Scheme Detail (Premium)\"].json.body.id }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": false,
         "options": {
           "response": {
             "response": {
-              "neverError": true,
-              "fullResponse": true
+              "neverError": true
             }
           }
         }
       },
-      "onError": "continueRegularOutput",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "REPLACE_WITH_CREDENTIAL_ID",
-          "name": "mfapisXApiKey"
-        }
-      }
-    },
-    {
-      "id": "fetch-nav-premium-node",
+      "id": "63422c5a-8a41-4387-a6b1-7cbf7ec6e0fc",
       "name": "Fetch NAV History (Premium)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        250,
-        50
+        -160,
+        0
       ],
-      "parameters": {
-        "method": "GET",
-        "url": "=https://app2.mfapis.club/api/v2/public/nav/{{ $node[\"Fetch Scheme Detail (Premium)\"].json.body.data?.id || $node[\"Fetch Scheme Detail (Premium)\"].json.body.id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": false,
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true,
-              "fullResponse": true
-            }
-          }
-        }
-      },
-      "onError": "continueRegularOutput",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_CREDENTIAL_ID",
-          "name": "mfapisXApiKey"
+          "id": "2DGjGQsye39Z4hv1",
+          "name": "mfAPI"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
-      "id": "unified-parser-premium-node",
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst premiumEnvelope = $('Fetch Scheme Detail (Premium)').first().json.body || $('Fetch Scheme Detail (Premium)').first().json || {};\nconst detailResponse = premiumEnvelope.data || premiumEnvelope || {};\nconst factsheetResponse = $('Fetch Factsheet (Premium)').first().json.data || $('Fetch Factsheet (Premium)').first().json.body?.data || $('Fetch Factsheet (Premium)').first().json.body || {};\nconst navResponse = $('Fetch NAV History (Premium)').first().json.body?.data || $('Fetch NAV History (Premium)').first().json.data || [];\n\nconst formatDate = (epochMs) => {\n  const d = new Date(epochMs);\n  const day = String(d.getDate()).padStart(2, '0');\n  const month = String(d.getMonth() + 1).padStart(2, '0');\n  const year = d.getFullYear();\n  return day + '-' + month + '-' + year;\n};\n\nconst navHistory = Array.isArray(navResponse) ? navResponse.map(n => ({\n  date: formatDate(n[0]),\n  nav: parseFloat(n[1]) || 0\n})) : [];\n\nconst mfData = detailResponse.mf_data || {};\nconst schemeList = Array.isArray(mfData.scheme) ? mfData.scheme : [];\nconst scheme0 = schemeList[0] || {};\nconst riskList = Array.isArray(mfData.risk_volatility) ? mfData.risk_volatility : [];\nconst risk3 = riskList.find((entry) => Number(entry?.period_years) === 3 || String(entry?.period_years) === '3') || riskList[0] || {};\n\nconst holdings = (mfData.equity_holdings || detailResponse.holdings || []).map(h => ({\n  security: h.holding_name || h.security_name || h.Holding_Name || h.name || \"\",\n  weight: parseFloat(h.portfolio_weight || h.weight_percent || h.Portfolio_Weight || h.weight) || 0\n}));\n\nconst aum = parseFloat(scheme0.total_assets ?? scheme0.aum ?? detailResponse.aum ?? detailResponse.total_aum ?? detailResponse.Asset_Size);\nconst expenseRatio = parseFloat(scheme0.expense_ratio ?? detailResponse.expense_ratio ?? detailResponse.ter);\nconst riskShapre = parseFloat(risk3.sharpe_ratio ?? risk3.sharpe ?? detailResponse.risk_metrics?.sharpe_ratio ?? detailResponse.sharpe_ratio);\nconst riskBeta = parseFloat(risk3.beta ?? detailResponse.risk_metrics?.beta ?? detailResponse.beta);\nconst riskAlpha = parseFloat(risk3.alpha ?? detailResponse.risk_metrics?.alpha ?? detailResponse.alpha);\nconst riskStdDev = parseFloat(risk3.standard_deviation ?? risk3.std_dev ?? risk3.standard_deviation_pct ?? detailResponse.risk_metrics?.standard_deviation ?? detailResponse.standard_deviation);\n\nconst supplemental = Array.isArray(mfData.supplemental_data) ? (mfData.supplemental_data[0] || {}) : {};\nconst rawCategory = supplemental.sebi_category_name || supplemental.sub_asset_class || scheme0.category || detailResponse.scheme_sub_category || detailResponse.scheme_category || '';\nconst category = String(rawCategory).replace(/-/g, ' ').replace(/\\s+/g, ' ').trim();\n\nconst output = {\n  scheme_code: String(detailResponse.scheme_code || detailResponse.scheme_amfi_code || detailResponse.amfi_code || detailResponse.BSE_Code || scheme0.scheme_code || \"\"),\n  isin: String(detailResponse.scheme_isin || detailResponse.isin || detailResponse.schemeISIN || scheme0.isin || factsheetResponse.isin || \"\"),\n  amc_name: detailResponse.scheme_amc_name || detailResponse.fund_house || detailResponse.amc_name || detailResponse.asset_manager || scheme0.fund_house || factsheetResponse.fund_name || \"\",\n  name: detailResponse.name || detailResponse.scheme_name || scheme0.scheme_name || \"\",\n  category: category,\n  nav_history: navHistory,\n  enriched: true,\n  holdings: holdings,\n  aum: Number.isFinite(aum) ? aum : null,\n  expense_ratio: Number.isFinite(expenseRatio) ? expenseRatio : null,\n  risk_metrics: {\n    sharpe: Number.isFinite(riskShapre) ? riskShapre : null,\n    beta: Number.isFinite(riskBeta) ? riskBeta : null,\n    alpha: Number.isFinite(riskAlpha) ? riskAlpha : null,\n    std_dev: Number.isFinite(riskStdDev) ? riskStdDev : null\n  },\n  factsheet_url: factsheetResponse.factsheet_url || factsheetResponse.link || factsheetResponse.pdf_link || detailResponse.factsheet_url || null\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "360708df-df81-4866-9840-97db68f4384f",
       "name": "Unified Output Parser (Premium)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        400,
-        50
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-  "jsCode": "const items = $input.all();\nconst premiumEnvelope = $('Fetch Scheme Detail (Premium)').first().json.body || $('Fetch Scheme Detail (Premium)').first().json || {};\nconst detailResponse = premiumEnvelope.data || premiumEnvelope || {};\nconst factsheetResponse = $('Fetch Factsheet (Premium)').first().json.body?.data || $('Fetch Factsheet (Premium)').first().json.body || {};\nconst navResponse = $('Fetch NAV History (Premium)').first().json.body?.data || $('Fetch NAV History (Premium)').first().json.data || [];\n\nconst formatDate = (epochMs) => {\n  const d = new Date(epochMs);\n  const day = String(d.getDate()).padStart(2, '0');\n  const month = String(d.getMonth() + 1).padStart(2, '0');\n  const year = d.getFullYear();\n  return day + '-' + month + '-' + year;\n};\n\nconst navHistory = Array.isArray(navResponse) ? navResponse.map(n => ({\n  date: formatDate(n[0]),\n  nav: parseFloat(n[1]) || 0\n})) : [];\n\nconst mfData = detailResponse.mf_data || {};\nconst schemeList = Array.isArray(mfData.scheme) ? mfData.scheme : [];\nconst scheme0 = schemeList[0] || {};\nconst riskList = Array.isArray(mfData.risk_volatility) ? mfData.risk_volatility : [];\nconst risk3 = riskList.find((entry) => Number(entry?.period_years) === 3 || String(entry?.period_years) === '3') || riskList[0] || {};\n\nconst holdings = (mfData.equity_holdings || detailResponse.holdings || []).map(h => ({\n  security: h.holding_name || h.security_name || h.Holding_Name || h.name || \"\",\n  weight: parseFloat(h.portfolio_weight || h.weight_percent || h.Portfolio_Weight || h.weight) || 0\n}));\n\nconst aumRaw = parseFloat(scheme0.total_assets ?? scheme0.aum ?? detailResponse.aum ?? detailResponse.total_aum ?? detailResponse.Asset_Size);\nconst aum = Number.isFinite(aumRaw) ? Math.round(aumRaw / 1e7) : NaN; // convert rupees → Crores\nconst expenseRatio = parseFloat(scheme0.expense_ratio ?? detailResponse.expense_ratio ?? detailResponse.ter);\nconst riskShapre = parseFloat(risk3.sharpe_ratio ?? risk3.sharpe ?? detailResponse.risk_metrics?.sharpe_ratio ?? detailResponse.sharpe_ratio);\nconst riskBeta = parseFloat(risk3.beta ?? detailResponse.risk_metrics?.beta ?? detailResponse.beta);\nconst riskAlpha = parseFloat(risk3.alpha ?? detailResponse.risk_metrics?.alpha ?? detailResponse.alpha);\nconst riskStdDev = parseFloat(risk3.standard_deviation ?? risk3.std_dev ?? risk3.standard_deviation_pct ?? detailResponse.risk_metrics?.standard_deviation ?? detailResponse.standard_deviation);\n\nconst output = {\n  scheme_code: String(detailResponse.scheme_code || detailResponse.scheme_amfi_code || detailResponse.amfi_code || detailResponse.BSE_Code || scheme0.scheme_code || \"\"),\n  isin: String(detailResponse.scheme_isin || detailResponse.isin || detailResponse.schemeISIN || scheme0.isin || factsheetResponse.isin || \"\"),\n  amc_name: detailResponse.fund_house || detailResponse.amc_name || detailResponse.asset_manager || scheme0.fund_house || factsheetResponse.fund_name || \"\",\n  name: detailResponse.name || detailResponse.scheme_name || scheme0.scheme_name || \"\",\n  nav_history: navHistory,\n  enriched: true,\n  holdings: holdings,\n  aum: Number.isFinite(aum) ? aum : null,\n  expense_ratio: Number.isFinite(expenseRatio) ? expenseRatio : null,\n  risk_metrics: {\n    sharpe: Number.isFinite(riskShapre) ? riskShapre : null,\n    beta: Number.isFinite(riskBeta) ? riskBeta : null,\n    alpha: Number.isFinite(riskAlpha) ? riskAlpha : null,\n    std_dev: Number.isFinite(riskStdDev) ? riskStdDev : null\n  },\n  factsheet_url: factsheetResponse.factsheet_url || factsheetResponse.link || factsheetResponse.pdf_link || detailResponse.factsheet_url || null\n};\n\nreturn [{ json: output }];"
-      }
+        64,
+        0
+      ]
     },
     {
-      "id": "respond-success-premium-node",
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "b8467f91-1471-4d6c-bd64-a83f33c184d9",
       "name": "Respond Success (Premium)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
-        50
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "return $input.all();"
-      }
+        288,
+        0
+      ]
     },
     {
-      "id": "search-public-node",
+      "parameters": {
+        "url": "=https://api.mfapi.in/mf/search?q={{ encodeURIComponent($node[\"Normalize Query\"].json.search_query) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b3863e04-703d-4aec-85e4-3029e40e1103",
       "name": "Search Public Scheme",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -600,
-        350
+        -384,
+        224
       ],
-      "parameters": {
-        "method": "GET",
-        "url": "=https://api.mfapi.in/mf/search?q={{ encodeURIComponent($node[\"When Executed by Another Workflow\"].json.query) }}",
-        "authentication": "none",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
       "onError": "continueRegularOutput"
     },
     {
-      "id": "extract-first-scheme-node",
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.length > 0 ? [{ json: items[0].json }] : [];"
+      },
+      "id": "a50e8361-7825-443c-b759-4c5ac0a0181e",
       "name": "Extract First Scheme",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -350,
-        350
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "const items = $input.all();\nreturn items.length > 0 ? [{ json: items[0].json }] : [];"
-      }
+        -160,
+        224
+      ]
     },
     {
-      "id": "fetch-public-details-node",
-      "name": "Fetch Public Details (NAV History)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        -100,
-        350
-      ],
       "parameters": {
-        "method": "GET",
         "url": "=https://api.mfapi.in/mf/{{ $json.schemeCode }}",
-        "authentication": "none",
         "options": {
           "response": {
             "response": {
@@ -299,39 +288,57 @@
           }
         }
       },
+      "id": "cfa26a8f-5c96-4ad4-a395-d2cd0fed731c",
+      "name": "Fetch Public Details (NAV History)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        64,
+        224
+      ],
       "onError": "continueRegularOutput"
     },
     {
-      "id": "unified-parser-fallback-node",
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst publicDetails = $('Fetch Public Details (NAV History)').first().json.body || $('Fetch Public Details (NAV History)').first().json || {};\n\nconst meta = publicDetails.meta || {};\nconst rawData = publicDetails.data || [];\n\nconst navHistory = rawData.map(n => ({\n  date: n.date,\n  nav: parseFloat(n.nav) || 0\n}));\n\nconst output = {\n  scheme_code: String(meta.scheme_code || \"\"),\n  isin: String(meta.scheme_isin || meta.isin || \"\"),\n  amc_name: meta.fund_house || meta.amc_name || \"\",\n  name: meta.scheme_name || \"\",\n  nav_history: navHistory,\n  enriched: false,\n  holdings: [],\n  aum: null,\n  expense_ratio: null,\n  risk_metrics: {\n    sharpe: null,\n    beta: null,\n    alpha: null,\n    std_dev: null\n  },\n  factsheet_url: null\n};\n\nreturn [{ json: output }];"
+      },
+      "id": "e0626917-0121-47b2-8722-be4357090ecc",
       "name": "Unified Output Parser (Fallback)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        150,
-        350
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-  "jsCode": "const items = $input.all();\nconst publicDetails = $('Fetch Public Details (NAV History)').first().json.body || $('Fetch Public Details (NAV History)').first().json || {};\n\nconst meta = publicDetails.meta || {};\nconst rawData = publicDetails.data || [];\n\nconst navHistory = rawData.map(n => ({\n  date: n.date,\n  nav: parseFloat(n.nav) || 0\n}));\n\nconst output = {\n  scheme_code: String(meta.scheme_code || \"\"),\n  isin: String(meta.scheme_isin || meta.isin || \"\"),\n  amc_name: meta.fund_house || meta.amc_name || \"\",\n  name: meta.scheme_name || \"\",\n  nav_history: navHistory,\n  enriched: false,\n  holdings: [],\n  aum: null,\n  expense_ratio: null,\n  risk_metrics: {\n    sharpe: null,\n    beta: null,\n    alpha: null,\n    std_dev: null\n  },\n  factsheet_url: null\n};\n\nreturn [{ json: output }];"
-      }
+        288,
+        224
+      ]
     },
     {
-      "id": "respond-fallback-public-node",
+      "parameters": {
+        "jsCode": "return $input.all();"
+      },
+      "id": "1f4b841c-58ab-47e6-9c4e-70c586ceccff",
       "name": "Respond Fallback (Public)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        400,
-        350
-      ],
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "return $input.all();"
-      }
+        512,
+        224
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
     "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Normalize Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Query": {
       "main": [
         [
           {
@@ -478,8 +485,20 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "V9VilKSmk8vDYEMc",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "e99e4dba-3cbb-41a2-a6b3-2148e5c9191a",
+  "meta": {
+    "instanceId": "727532e30984c5e2bf6dd57cbce46198766a1969174f8ec5cee6b37f07aed994"
+  },
+  "nodeGroups": [],
+  "id": "kqxZ37lgJQSaPtSR",
+  "tags": []
 }
