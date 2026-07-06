@@ -1,0 +1,390 @@
+{
+  "name": "Day 7 - Pipeline Evaluator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a7b8c9d0-0007-0007-0007-000000000001",
+      "name": "Manual Trigger - Run Evaluation",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [180, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "const testCases = [\n  {\n    test_id: 'TC001',\n    category: 'health_check',\n    question: 'What is my current portfolio health score? List all risk flags and give me the diversification score.',\n    expected_tools: ['getPortfolioHealthScore'],\n    rubric: {\n      mentions_score: '\\\\d+/100|score.*\\\\d+|\\\\d+.*score|health.*\\\\d+',\n      mentions_flags: 'flag|risk|concentration|concern|warning',\n      gives_recommendation: 'recommend|suggest|consider|should|action',\n      uses_rupee_or_pct: '₹|%|percent|lakh|crore',\n      mentions_component: 'diversification|liquidity|cost|returns|component'\n    }\n  },\n  {\n    test_id: 'TC002',\n    category: 'stress_test',\n    question: 'How would my portfolio have performed in the 2008 global financial crisis? What was the estimated drawdown percentage and how many months to recover?',\n    expected_tools: ['getPortfolioStressTest'],\n    rubric: {\n      mentions_gfc: '2008|financial crisis|GFC|global financial',\n      mentions_drawdown: 'drawdown|fall|drop|decline|fell|lost',\n      mentions_percentage: '\\\\d+%|percent|\\\\d+\\\\.\\\\d+%',\n      mentions_recovery: 'recover|months|years|bounce back',\n      uses_specific_numbers: '\\\\d+\\\\.\\\\d+|\\\\d+,\\\\d+'\n    }\n  },\n  {\n    test_id: 'TC003',\n    category: 'tax_redemption',\n    question: 'I need Rs 2 lakhs urgently for a medical emergency. Which specific funds should I redeem and in what order to minimize capital gains tax?',\n    expected_tools: ['getSmartRedemptionPlan', 'getTaxAwareRedemptionPlan'],\n    rubric: {\n      mentions_ltcg: 'LTCG|long.term capital|long term gain',\n      mentions_stcg: 'STCG|short.term capital|short term gain',\n      mentions_specific_fund: 'fund|scheme|plan|direct|growth',\n      mentions_net_amount: 'net amount|after tax|net proceeds|in hand',\n      mentions_order: 'first|then|next|order|sequence|priority'\n    }\n  },\n  {\n    test_id: 'TC004',\n    category: 'sip_projection',\n    question: 'If I start a SIP of Rs 20,000 per month in HDFC Flexi Cap Fund for 15 years assuming 13% annual returns, how much total corpus will I accumulate?',\n    expected_tools: ['getSipProjection'],\n    rubric: {\n      mentions_corpus: 'corpus|total|accumulated|maturity|value',\n      mentions_invested: 'invested|invest|total investment',\n      mentions_large_number: 'crore|lakh|\\\\d{2},\\\\d{2},\\\\d{3}|\\\\d+\\\\.\\\\d+ cr',\n      mentions_time: '15 year|fifteen year|period',\n      mentions_gain: 'gain|profit|growth|wealth'\n    }\n  },\n  {\n    test_id: 'TC005',\n    category: 'fund_comparison',\n    question: 'Compare HDFC Mid Cap Opportunities Fund and Nippon India Growth Fund in terms of alpha generation vs their benchmark. Which one should I prefer?',\n    expected_tools: ['comparePortfolioFunds', 'getFundVsIndexComparison'],\n    rubric: {\n      mentions_both_funds: '(?=.*HDFC)(?=.*Nippon)|(?=.*Nippon)(?=.*HDFC)',\n      mentions_alpha: 'alpha|benchmark|outperform|beat',\n      gives_clear_recommendation: 'recommend|prefer|better|choose|switch|stay|retain',\n      mentions_returns: 'return|XIRR|%|performance',\n      provides_comparison: 'vs|compared|versus|better than|higher than|lower than'\n    }\n  }\n];\n\nreturn testCases.map(tc => ({ json: tc }));"
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000002",
+      "name": "Define Test Cases",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 340]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000003",
+      "name": "Process One Test at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [620, 340]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.question }}",
+        "options": {
+          "systemMessage": "You are an expert mutual fund and investment portfolio advisor for Indian investors. You have access to real-time portfolio data via specialized tools. Always call at least one data-fetching tool before giving investment recommendations. Present numbers in Indian format with ₹ symbol.",
+          "maxIterations": 8
+        }
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000004",
+      "name": "AI Advisor - Test Run",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [860, 260]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1500
+        }
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000005",
+      "name": "OpenAI GPT-4o",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [760, 440],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "connectionType": "sse",
+        "sseEndpoint": "https://app2.mfapis.club/mcp/portfolio-analytics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000006",
+      "name": "MCP - Portfolio Analytics",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [960, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const testCase = $node['Process One Test at a Time'].json;\nconst agentResponse = $input.first().json;\nconst aiAnswer = agentResponse.output || '';\nconst steps = agentResponse.intermediateSteps || [];\nconst toolsUsed = [...new Set(steps.map(s => s.action?.tool).filter(Boolean))];\n\nconst rubric = testCase.rubric;\nconst expectedTools = testCase.expected_tools;\n\nconst rubricResults = {};\nlet rubricScore = 0;\nconst maxRubricScore = Object.keys(rubric).length;\n\nObject.entries(rubric).forEach(([criterion, pattern]) => {\n  let passed = false;\n  try {\n    const regex = new RegExp(pattern, 'is');\n    passed = regex.test(aiAnswer);\n  } catch(e) {\n    passed = aiAnswer.toLowerCase().includes(pattern.toLowerCase());\n  }\n  rubricResults[criterion] = passed;\n  if (passed) rubricScore++;\n});\n\nconst toolsCorrect = expectedTools.some(t => toolsUsed.includes(t));\nconst unexpectedTools = toolsUsed.filter(t => !expectedTools.includes(t));\nconst toolScore = toolsCorrect ? 1 : 0;\n\nconst rawScore = (rubricScore / maxRubricScore) * 4 + toolScore;\nconst totalScore = Math.round(rawScore);\nconst passed = totalScore >= 3;\n\nconst approxTokens = Math.round((aiAnswer.length + testCase.question.length) / 4);\n\nreturn [{\n  json: {\n    test_id: testCase.test_id,\n    category: testCase.category,\n    question: testCase.question,\n    ai_answer_preview: aiAnswer.slice(0, 800),\n    tools_used: toolsUsed,\n    expected_tools: expectedTools,\n    tools_correct: toolsCorrect,\n    unexpected_tools: unexpectedTools,\n    rubric_results: rubricResults,\n    rubric_score: rubricScore,\n    max_rubric_score: maxRubricScore,\n    tool_score: toolScore,\n    total_score: totalScore,\n    max_score: 5,\n    passed,\n    score_pct: Math.round((totalScore / 5) * 100),\n    approx_tokens: approxTokens,\n    evaluated_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000007",
+      "name": "Evaluate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 260]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\n\nconst totalTests = results.length;\nconst passedCount = results.filter(r => r.passed).length;\nconst failedCount = totalTests - passedCount;\nconst avgScore = results.reduce((s, r) => s + r.total_score, 0) / totalTests;\nconst avgRubricPct = results.reduce((s, r) => s + r.score_pct, 0) / totalTests;\nconst totalTokens = results.reduce((s, r) => s + r.approx_tokens, 0);\nconst toolAccuracy = results.filter(r => r.tools_correct).length / totalTests;\n\nconst byCategory = {};\nresults.forEach(r => {\n  if (!byCategory[r.category]) byCategory[r.category] = { tests: 0, passed: 0, total_score: 0 };\n  byCategory[r.category].tests++;\n  if (r.passed) byCategory[r.category].passed++;\n  byCategory[r.category].total_score += r.total_score;\n});\n\nconst categoryBreakdown = Object.entries(byCategory).map(([cat, data]) => ({\n  category: cat,\n  tests: data.tests,\n  pass_rate_pct: Math.round((data.passed / data.tests) * 100),\n  avg_score: Math.round((data.total_score / data.tests) * 10) / 10\n}));\n\nconst grade = avgScore >= 4.5 ? 'A+' : avgScore >= 4 ? 'A' : avgScore >= 3.5 ? 'B+' : avgScore >= 3 ? 'B' : avgScore >= 2 ? 'C' : 'D';\n\nconst failedTests = results.filter(r => !r.passed).map(r => ({\n  test_id: r.test_id,\n  category: r.category,\n  score: r.total_score,\n  missing_rubric: Object.entries(r.rubric_results).filter(([k, v]) => !v).map(([k]) => k)\n}));\n\nreturn [{\n  json: {\n    run_id: 'EVAL-' + Date.now(),\n    run_date: new Date().toISOString().slice(0, 10),\n    run_timestamp: new Date().toISOString(),\n    summary: {\n      total_tests: totalTests,\n      passed: passedCount,\n      failed: failedCount,\n      pass_rate_pct: Math.round((passedCount / totalTests) * 100),\n      avg_score_out_of_5: Math.round(avgScore * 10) / 10,\n      avg_rubric_score_pct: Math.round(avgRubricPct),\n      tool_selection_accuracy_pct: Math.round(toolAccuracy * 100),\n      total_tokens_consumed: totalTokens,\n      overall_grade: grade\n    },\n    category_breakdown: categoryBreakdown,\n    failed_tests: failedTests,\n    individual_results: results\n  }\n}];"
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000008",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{ $env.AIRTABLE_BASE_ID || 'appXXXXXXXXXXXXXX' }}/EvaluationRuns",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.AIRTABLE_API_KEY || 'your-airtable-key' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "={{ JSON.stringify({ 'Run ID': $json.run_id, 'Run Date': $json.run_date, 'Pass Rate %': $json.summary.pass_rate_pct, 'Average Score': $json.summary.avg_score_out_of_5, 'Tool Accuracy %': $json.summary.tool_selection_accuracy_pct, 'Overall Grade': $json.summary.overall_grade, 'Passed': $json.summary.passed, 'Failed': $json.summary.failed, 'Tokens Used': $json.summary.total_tokens_consumed, 'Results JSON': JSON.stringify($json.individual_results).slice(0, 95000) }) }}"
+            }
+          ]
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000009",
+      "name": "Store to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 240]
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@yourfirm.com",
+        "toEmail": "engineering@yourfirm.com",
+        "subject": "=[AI Pipeline Eval] Grade: {{ $json.summary.overall_grade }} | Pass Rate: {{ $json.summary.pass_rate_pct }}% | {{ $json.run_date }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html><html><head><style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px}.grade{font-size:48px;font-weight:bold;text-align:center;padding:20px;border-radius:8px;margin-bottom:20px}.A{background:#dcfce7;color:#16a34a}.B{background:#dbeafe;color:#1d4ed8}.C{background:#fef9c3;color:#ca8a04}.D{background:#fee2e2;color:#dc2626}table{width:100%;border-collapse:collapse}th{background:#1e3a5f;color:white;padding:10px;text-align:left}td{padding:8px 10px;border-bottom:1px solid #e5e7eb}.pass{color:#22c55e;font-weight:bold}.fail{color:#ef4444;font-weight:bold}</style></head><body>\n<h1>AI Pipeline Evaluation Report</h1>\n<p>Run ID: {{ $json.run_id }} | Date: {{ $json.run_date }}</p>\n<div class=\"grade {{ $json.summary.overall_grade.charAt(0) }}\">Grade: {{ $json.summary.overall_grade }}</div>\n<h2>Summary</h2>\n<table>\n<tr><th>Metric</th><th>Value</th></tr>\n<tr><td>Tests Run</td><td>{{ $json.summary.total_tests }}</td></tr>\n<tr><td>Passed</td><td class=\"pass\">{{ $json.summary.passed }}</td></tr>\n<tr><td>Failed</td><td class=\"fail\">{{ $json.summary.failed }}</td></tr>\n<tr><td>Pass Rate</td><td>{{ $json.summary.pass_rate_pct }}%</td></tr>\n<tr><td>Average Score</td><td>{{ $json.summary.avg_score_out_of_5 }}/5</td></tr>\n<tr><td>Tool Selection Accuracy</td><td>{{ $json.summary.tool_selection_accuracy_pct }}%</td></tr>\n<tr><td>Tokens Consumed</td><td>{{ $json.summary.total_tokens_consumed }}</td></tr>\n</table>\n<h2>By Category</h2>\n<table><tr><th>Category</th><th>Tests</th><th>Pass Rate</th><th>Avg Score</th></tr>{{ $json.category_breakdown.map(c => '<tr><td>' + c.category + '</td><td>' + c.tests + '</td><td>' + c.pass_rate_pct + '%</td><td>' + c.avg_score + '/5</td></tr>').join('') }}</table>\n{{ $json.failed_tests.length > 0 ? '<h2>Failed Tests</h2><table><tr><th>Test ID</th><th>Category</th><th>Score</th><th>Missing Criteria</th></tr>' + $json.failed_tests.map(f => '<tr><td>' + f.test_id + '</td><td>' + f.category + '</td><td>' + f.score + '/5</td><td>' + f.missing_rubric.join(', ') + '</td></tr>').join('') + '</table>' : '<p style=\"color:#22c55e\">All tests passed!</p>' }}\n</body></html>",
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000010",
+      "name": "Email Quality Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1560, 420],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "cond-regression",
+              "leftValue": "={{ $json.summary.pass_rate_pct }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000011",
+      "name": "Quality Below Threshold?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1780, 340]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID || '-100123456789' }}",
+        "text": "=🚨 AI Pipeline Quality Alert\n\nEvaluation Run: {{ $node['Aggregate Results'].json.run_id }}\nDate: {{ $node['Aggregate Results'].json.run_date }}\n\nGrade: {{ $node['Aggregate Results'].json.summary.overall_grade }} ❌\nPass Rate: {{ $node['Aggregate Results'].json.summary.pass_rate_pct }}% (below 60% threshold)\nFailed: {{ $node['Aggregate Results'].json.summary.failed }}/{{ $node['Aggregate Results'].json.summary.total_tests }} tests\n\nFailed categories:\n{{ $node['Aggregate Results'].json.failed_tests.map(f => '• ' + f.test_id + ' (' + f.category + '): ' + f.score + '/5').join('\\n') }}\n\nImmediate investigation required!",
+        "additionalFields": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000012",
+      "name": "Alert - Quality Regression",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2000, 240],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-cred",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ok-eval",
+              "name": "evaluation_status",
+              "value": "PASSED",
+              "type": "string"
+            },
+            {
+              "id": "ok-grade",
+              "name": "grade",
+              "value": "={{ $node['Aggregate Results'].json.summary.overall_grade }}",
+              "type": "string"
+            },
+            {
+              "id": "ok-rate",
+              "name": "pass_rate_pct",
+              "value": "={{ $node['Aggregate Results'].json.summary.pass_rate_pct }}",
+              "type": "number"
+            },
+            {
+              "id": "ok-msg",
+              "name": "message",
+              "value": "Pipeline quality within acceptable thresholds.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7b8c9d0-0007-0007-0007-000000000013",
+      "name": "Log Quality OK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2000, 440]
+    }
+  ],
+  "connections": {
+    "Manual Trigger - Run Evaluation": {
+      "main": [
+        [
+          {
+            "node": "Define Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Test Cases": {
+      "main": [
+        [
+          {
+            "node": "Process One Test at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One Test at a Time": {
+      "main": [
+        [
+          {
+            "node": "AI Advisor - Test Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Advisor - Test Run": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Response": {
+      "main": [
+        [
+          {
+            "node": "Process One Test at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Store to Airtable",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Quality Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Quality Report": {
+      "main": [
+        [
+          {
+            "node": "Quality Below Threshold?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Below Threshold?": {
+      "main": [
+        [
+          {
+            "node": "Alert - Quality Regression",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Quality OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4o": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Advisor - Test Run",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Portfolio Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Advisor - Test Run",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "day7-v1-pipeline-evaluator",
+  "id": "day7-pipeline-evaluator",
+  "tags": [
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-workshop", "name": "workshop" },
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-day7", "name": "day7" }
+  ]
+}

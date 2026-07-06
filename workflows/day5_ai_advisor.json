@@ -1,0 +1,325 @@
+{
+  "name": "Day 5 - AI Portfolio Advisor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portfolio-advisor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000001",
+      "name": "Webhook - Advisor Query",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [180, 300],
+      "webhookId": "portfolio-advisor-webhook-001"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-question",
+              "name": "question",
+              "value": "={{ $json.body.question }}",
+              "type": "string"
+            },
+            {
+              "id": "set-investor",
+              "name": "investor_id",
+              "value": "={{ $json.body.investor_id || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "set-received",
+              "name": "received_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000002",
+      "name": "Extract Question",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {},
+          "conditions": [
+            {
+              "id": "cond-question-exists",
+              "leftValue": "={{ $json.question }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000003",
+      "name": "Has Question?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.question }}\n\nInvestor ID: {{ $json.investor_id }}\nCurrent Date: {{ $now.format('YYYY-MM-DD') }}",
+        "options": {
+          "systemMessage": "You are an expert mutual fund and investment portfolio advisor for Indian investors.\nYou have access to real-time portfolio data via specialized tools.\n\nIMPORTANT RULES:\n1. Always call at least one data-fetching tool before giving investment recommendations — never answer from general knowledge alone.\n2. When asked about portfolio health or overview, call getPortfolioHealthScore first, then getPortfolioXray for details.\n3. When asked about redemption, call getSmartRedemptionPlan or getTaxAwareRedemptionPlan.\n4. When asked about SIP projections, call getSipProjection.\n5. When asked about stress tests, call getPortfolioStressTest with the appropriate scenario.\n6. Present numbers in Indian format (₹ symbol, lakhs/crores for large numbers).\n7. Always mention XIRR when discussing returns.\n8. Flag any concentration risk or red flags in the Xray data.\n9. End every response with one specific, actionable recommendation.\n10. Never recommend specific stock picks — focus on mutual fund strategies only.\n\nTOOL SELECTION GUIDE:\n- 'how is my portfolio doing?' → getPortfolioHealthScore + getPortfolioXray\n- 'what happens if markets crash?' → getPortfolioStressTest\n- 'which funds to switch?' → comparePortfolioFunds + getTopAlternativeFunds\n- 'should I redeem?' → getSmartRedemptionPlan or getTaxAwareRedemptionPlan\n- 'SIP planning' → getSipProjection\n- 'factor analysis' → getPortfolioFactorExposure\n- 'rebalancing' → getPortfolioAllocationAnalysis",
+          "maxIterations": 10
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000004",
+      "name": "AI Portfolio Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2000
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000005",
+      "name": "OpenAI GPT-4o",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [780, 440],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-cred",
+          "name": "OpenAI GPT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "connectionType": "sse",
+        "sseEndpoint": "https://app2.mfapis.club/mcp/portfolio-analytics",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000006",
+      "name": "MCP - Portfolio Analytics",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [980, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "connectionType": "sse",
+        "sseEndpoint": "https://app2.mfapis.club/mcp/portfolio-cas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000007",
+      "name": "MCP - Portfolio CAS",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [1100, 440],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mf-engine-api-cred",
+          "name": "MF Engine API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionKey": "={{ $('Extract Question').item.json.investor_id }}",
+        "contextWindowLength": 10
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000008",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [860, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $input.first().json.output || '';\nconst steps = $input.first().json.intermediateSteps || [];\nconst toolsUsed = [...new Set(steps.map(s => s.action?.tool).filter(Boolean))];\n\nconst questionData = $node['Extract Question'].json;\n\nreturn [{\n  json: {\n    question: questionData.question,\n    answer: agentOutput,\n    tools_called: toolsUsed,\n    tool_call_count: toolsUsed.length,\n    investor_id: questionData.investor_id,\n    responded_at: new Date().toISOString(),\n    confidence: toolsUsed.length >= 3 ? 'high' : toolsUsed.length >= 2 ? 'medium' : 'low'\n  }\n}];"
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000009",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ question: $json.question, answer: $json.answer, tools_used: $json.tools_called, confidence: $json.confidence, timestamp: $json.responded_at }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000010",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"error\": \"question field is required\", \"example\": {\"question\": \"What is my portfolio health score?\"}}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "e5f6a7b8-0005-0005-0005-000000000011",
+      "name": "Respond - Bad Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [840, 400]
+    }
+  ],
+  "connections": {
+    "Webhook - Advisor Query": {
+      "main": [
+        [
+          {
+            "node": "Extract Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Question": {
+      "main": [
+        [
+          {
+            "node": "Has Question?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Question?": {
+      "main": [
+        [
+          {
+            "node": "AI Portfolio Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Bad Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Portfolio Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4o": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Portfolio Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Portfolio Analytics": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Portfolio Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP - Portfolio CAS": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Portfolio Agent",
+            "type": "ai_tool",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Conversation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Portfolio Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "day5-v1-ai-advisor",
+  "id": "day5-ai-advisor",
+  "tags": [
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-workshop", "name": "workshop" },
+    { "createdAt": "2025-07-04T00:00:00.000Z", "updatedAt": "2025-07-04T00:00:00.000Z", "id": "tag-day5", "name": "day5" }
+  ]
+}
